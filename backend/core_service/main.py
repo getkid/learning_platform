@@ -3,11 +3,12 @@ from sqlalchemy.orm import Session
 from fastapi.security import OAuth2PasswordRequestForm 
 from fastapi.middleware.cors import CORSMiddleware
 from datetime import timedelta
+from typing import List
 
 import models
 import schemas
 import crud
-from database import engine, get_db
+from database import SessionLocal, engine, get_db
 import security
 from config import ACCESS_TOKEN_EXPIRE_MINUTES
 
@@ -15,6 +16,15 @@ models.Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title="Core Service")
 
+@app.on_event("startup")
+def startup_event():
+    db = SessionLocal()
+    courses = crud.get_courses(db)
+    if not courses:
+        print("База данных курсов пуста. Создаю тестовые данные...")
+        crud.create_course(db, title="Python for Beginners", description="Learn the basics of Python programming.")
+        crud.create_course(db, title="Advanced JavaScript", description="Deep dive into JS concepts.")
+    db.close()
 
 @app.get("/health")
 def health_check():
@@ -62,3 +72,11 @@ def login_for_access_token(
     )
 
     return {"access_token": access_token, "token_type": "bearer"}
+
+@app.get("/courses", response_model=List[schemas.Course])
+def read_courses(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
+    """
+    Возвращает список всех доступных курсов.
+    """
+    courses = crud.get_courses(db, skip=skip, limit=limit)
+    return courses

@@ -1,4 +1,4 @@
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 import models
 import schemas
 from passlib.context import CryptContext
@@ -24,3 +24,15 @@ def create_user(db: Session, user: schemas.UserCreate):
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     """Проверить, соответствует ли пароль хэшу."""
     return pwd_context.verify(plain_password, hashed_password)
+
+def get_courses(db: Session, skip: int = 0, limit: int = 100):
+    """Получить список всех курсов."""
+    return db.query(models.Course).offset(skip).limit(limit).all()
+
+def create_course(db: Session, title: str, description: str):
+    """ (Вспомогательная функция) Создать тестовый курс. """
+    db_course = models.Course(title=title, description=description)
+    db.add(db_course)
+    db.commit()
+    db.refresh(db_course)
+    return db_course
