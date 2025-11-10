@@ -1,11 +1,12 @@
+// frontend/src/App.js
+
 import React from 'react';
 import { Routes, Route, Link } from 'react-router-dom';
 
-import RegisterPage from './pages/RegisterPage'; 
+import RegisterPage from './pages/RegisterPage';
+import LoginPage from './pages/LoginPage';
 
 const HomePage = () => <h1>Home Page</h1>;
-
-const LoginPage = () => <h1>Login Page</h1>;
 
 function App() {
   return (
@@ -18,7 +19,7 @@ function App() {
       <hr />
       <Routes>
         <Route path="/" element={<HomePage />} />
-        <Route path="/register" element={<RegisterPage />} /> 
+        <Route path="/register" element={<RegisterPage />} />
         <Route path="/login" element={<LoginPage />} />
       </Routes>
     </div>
