@@ -2,11 +2,14 @@ from fastapi import FastAPI, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from fastapi.security import OAuth2PasswordRequestForm 
 from fastapi.middleware.cors import CORSMiddleware
+from datetime import timedelta
 
 import models
 import schemas
 import crud
 from database import engine, get_db
+import security
+from config import ACCESS_TOKEN_EXPIRE_MINUTES
 
 models.Base.metadata.create_all(bind=engine)
 
@@ -53,8 +56,9 @@ def login_for_access_token(
             headers={"WWW-Authenticate": "Bearer"},
         )
     
-    # Если аутентификация прошла успешно
-    # !!! В будущем здесь будет генерация JWT-токена !!!
-    access_token = {"sub": user.email} # Пока что просто заглушка
+    access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    access_token = security.create_access_token(
+        data={"sub": user.email}, expires_delta=access_token_expires
+    )
 
     return {"access_token": access_token, "token_type": "bearer"}
