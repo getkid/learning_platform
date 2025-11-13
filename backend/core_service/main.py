@@ -1,9 +1,16 @@
+import os
+import pika
+import json
+import uuid
+from pydantic import BaseModel
+
 from fastapi import FastAPI, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from fastapi.security import OAuth2PasswordRequestForm 
 from fastapi.middleware.cors import CORSMiddleware
 from datetime import timedelta
 from typing import List
+
 
 import models
 import schemas
@@ -15,6 +22,19 @@ from config import ACCESS_TOKEN_EXPIRE_MINUTES
 models.Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title="Core Service")
+
+origins = [
+    "http://localhost:3000",
+]
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+RABBITMQ_URL = os.getenv("RABBITMQ_URL", "amqp://guest:guest@rabbitmq:5672/")
 
 @app.on_event("startup")
 def startup_event():
@@ -28,9 +48,11 @@ def startup_event():
         py_mod1 = models.Module(title="Module 1: Introduction", course=py_course)
         py_mod2 = models.Module(title="Module 2: Data Types", course=py_course)
         # Создаем уроки для модулей
+        py_mod3 = models.Module(title="Module 3: Practice", course=py_course)
         models.Lesson(title="Lesson 1.1: What is Python?", module=py_mod1, content="Python is a high-level, interpreted programming language...")
         models.Lesson(title="Lesson 1.2: Installation", module=py_mod1, content="To install Python, go to the official website python.org...")
         models.Lesson(title="Lesson 2.1: Numbers and Strings", module=py_mod2, content="Python supports various data types, including integers, floats, and strings...")
+        models.Lesson(title="Lesson 3.1: First Program", module=py_mod3, lesson_type="practice", content="Write a program that prints 'Hello, World!' to the console.")
         # Создаем курс JS
         js_course = models.Course(title="Advanced JavaScript", description="Deep dive into JS concepts.")
 
@@ -109,3 +131,42 @@ def read_lesson(lesson_id: int, db: Session = Depends(get_db)):
     if db_lesson is None:
         raise HTTPException(status_code=404, detail="Lesson not found")
     return db_lesson
+
+class SubmissionRequest(BaseModel):
+    code: str
+
+@app.post("/lessons/{lesson_id}/submit")
+def submit_code(lesson_id: int, submission: SubmissionRequest, db: Session = Depends(get_db)):
+    db_lesson = crud.get_lesson_by_id(db, lesson_id=lesson_id)
+    if db_lesson is None:
+        raise HTTPException(status_code=404, detail="Lesson not found")
+
+    try:
+        # Подключаемся к RabbitMQ
+        connection = pika.BlockingConnection(pika.URLParameters(RABBITMQ_URL))
+        channel = connection.channel()
+
+        # Объявляем очередь (если ее нет, она создастся)
+        channel.queue_declare(queue='submission_queue', durable=True)
+
+        # Формируем сообщение
+        submission_id = str(uuid.uuid4())
+        message = {
+            "submission_id": submission_id,
+            "lesson_id": lesson_id,
+            "code": submission.code,
+        }
+
+        # Отправляем сообщение в очередь
+        channel.basic_publish(
+            exchange='',
+            routing_key='submission_queue',
+            body=json.dumps(message),
+            properties=pika.BasicProperties(delivery_mode=pika.spec.PERSISTENT_DELIVERY_MODE) # Делаем сообщение персистентным
+        )
+        connection.close()
+
+        # Возвращаем ID отправки, чтобы frontend мог отслеживать результат
+        return {"status": "pending", "submission_id": submission_id}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to submit code: {e}")

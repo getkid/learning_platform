@@ -1,5 +1,6 @@
 fastapi
 uvicorn[standard]
+pika
 
 sqlalchemy
 psycopg2-binary

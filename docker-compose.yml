@@ -35,6 +35,11 @@ services:
       - "15672:15672"
     volumes:
       - rabbitmq_data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "check_running", "-q"]
+      interval: 5s
+      timeout: 10s
+      retries: 5
     restart: unless-stopped
 
   core_service:
@@ -54,7 +59,7 @@ services:
       postgres_db:
         condition: service_healthy
       rabbitmq: 
-        condition: service_started
+        condition: service_healthy
     restart: unless-stopped
 
   code_executor_service:
@@ -62,7 +67,7 @@ services:
       context: ./backend/code_executor_service
       dockerfile: Dockerfile
     container_name: code_executor_service
-    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+    command: python main.py
     volumes:
       - ./backend/code_executor_service:/app
     ports:
@@ -70,7 +75,8 @@ services:
     environment:
       - RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672/
     depends_on:
-      - rabbitmq
+      rabbitmq:
+        condition: service_healthy
     restart: unless-stopped
 
   ai_service:
