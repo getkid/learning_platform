@@ -28,17 +28,16 @@ def startup_event():
         py_mod1 = models.Module(title="Module 1: Introduction", course=py_course)
         py_mod2 = models.Module(title="Module 2: Data Types", course=py_course)
         # Создаем уроки для модулей
-        models.Lesson(title="Lesson 1.1: What is Python?", module=py_mod1)
-        models.Lesson(title="Lesson 1.2: Installation", module=py_mod1)
-        models.Lesson(title="Lesson 2.1: Numbers and Strings", module=py_mod2)
-
+        models.Lesson(title="Lesson 1.1: What is Python?", module=py_mod1, content="Python is a high-level, interpreted programming language...")
+        models.Lesson(title="Lesson 1.2: Installation", module=py_mod1, content="To install Python, go to the official website python.org...")
+        models.Lesson(title="Lesson 2.1: Numbers and Strings", module=py_mod2, content="Python supports various data types, including integers, floats, and strings...")
         # Создаем курс JS
         js_course = models.Course(title="Advanced JavaScript", description="Deep dive into JS concepts.")
 
         db.add_all([py_course, js_course])
         db.commit()
     db.close()
-    
+
 @app.get("/health")
 def health_check():
     """Простая проверка, что сервис жив."""
@@ -100,3 +99,13 @@ def read_course(course_id: int, db: Session = Depends(get_db)):
     if db_course is None:
         raise HTTPException(status_code=404, detail="Course not found")
     return db_course
+
+@app.get("/lessons/{lesson_id}", response_model=schemas.Lesson)
+def read_lesson(lesson_id: int, db: Session = Depends(get_db)):
+    """
+    Возвращает полную информацию об уроке по его ID.
+    """
+    db_lesson = crud.get_lesson_by_id(db, lesson_id=lesson_id)
+    if db_lesson is None:
+        raise HTTPException(status_code=404, detail="Lesson not found")
+    return db_lesson

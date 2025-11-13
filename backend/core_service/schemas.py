@@ -29,7 +29,7 @@ class UserOut(BaseModel):
 class Lesson(BaseModel):
     id: int
     title: str
-
+    content: Optional[str] = None # <-- ДОБАВЛЕНО
     class Config:
         orm_mode = True
 

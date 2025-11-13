@@ -40,3 +40,7 @@ def create_course(db: Session, title: str, description: str):
 def get_course_by_id(db: Session, course_id: int):
     """Получить один курс по его ID со всеми модулями и уроками."""
     return db.query(models.Course).filter(models.Course.id == course_id).first()
+
+def get_lesson_by_id(db: Session, lesson_id: int):
+    """Получить один урок по его ID."""
+    return db.query(models.Lesson).filter(models.Lesson.id == lesson_id).first()
