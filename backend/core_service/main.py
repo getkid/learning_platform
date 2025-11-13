@@ -22,10 +22,23 @@ def startup_event():
     courses = crud.get_courses(db)
     if not courses:
         print("База данных курсов пуста. Создаю тестовые данные...")
-        crud.create_course(db, title="Python for Beginners", description="Learn the basics of Python programming.")
-        crud.create_course(db, title="Advanced JavaScript", description="Deep dive into JS concepts.")
-    db.close()
+        # Создаем курс Python
+        py_course = models.Course(title="Python for Beginners", description="Learn the basics of Python programming.")
+        # Создаем модули для него
+        py_mod1 = models.Module(title="Module 1: Introduction", course=py_course)
+        py_mod2 = models.Module(title="Module 2: Data Types", course=py_course)
+        # Создаем уроки для модулей
+        models.Lesson(title="Lesson 1.1: What is Python?", module=py_mod1)
+        models.Lesson(title="Lesson 1.2: Installation", module=py_mod1)
+        models.Lesson(title="Lesson 2.1: Numbers and Strings", module=py_mod2)
 
+        # Создаем курс JS
+        js_course = models.Course(title="Advanced JavaScript", description="Deep dive into JS concepts.")
+
+        db.add_all([py_course, js_course])
+        db.commit()
+    db.close()
+    
 @app.get("/health")
 def health_check():
     """Простая проверка, что сервис жив."""
@@ -73,10 +86,17 @@ def login_for_access_token(
 
     return {"access_token": access_token, "token_type": "bearer"}
 
-@app.get("/courses", response_model=List[schemas.Course])
+@app.get("/courses", response_model=List[schemas.CourseShort])
 def read_courses(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
-    """
-    Возвращает список всех доступных курсов.
-    """
     courses = crud.get_courses(db, skip=skip, limit=limit)
     return courses
+
+@app.get("/courses/{course_id}", response_model=schemas.CourseFull)
+def read_course(course_id: int, db: Session = Depends(get_db)):
+    """
+    Возвращает полную информацию о курсе по его ID.
+    """
+    db_course = crud.get_course_by_id(db, course_id=course_id)
+    if db_course is None:
+        raise HTTPException(status_code=404, detail="Course not found")
+    return db_course
