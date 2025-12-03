@@ -1,5 +1,3 @@
-// frontend/src/App.js
-
 import React from 'react';
 import { Routes, Route, Link } from 'react-router-dom';
 import { useAuth } from './context/AuthContext';
@@ -9,6 +7,7 @@ import LoginPage from './pages/LoginPage';
 import CourseListPage from './pages/CourseListPage'; 
 import CourseDetailPage from './pages/CourseDetailPage';
 import LessonPage from './pages/LessonPage';
+import PracticeLessonPage from './pages/PracticeLessonPage';
 
 const HomePage = () => <h1>Home Page</h1>;
 const ProfilePage = () => <h1>User Profile Page</h1>;
@@ -20,7 +19,7 @@ function App() {
     <div>
       <nav>
         <Link to="/">Home</Link> | {" "}
-        <Link to="/courses">Courses</Link> | {" "} {/* <-- 2. Добавляем ссылку */}
+        <Link to="/courses">Courses</Link> | {" "}
         {isAuthenticated ? (
           <>
             <Link to="/profile">Profile</Link> | {" "}
@@ -36,11 +35,12 @@ function App() {
       <hr />
       <Routes>
         <Route path="/" element={<HomePage />} />
-        <Route path="/courses" element={<CourseListPage />} /> {/* <-- 3. Добавляем маршрут */}
-        <Route path="/courses/:courseId" element={<CourseDetailPage />} /> {/* Маршрут для будущей страницы курса */}
+        <Route path="/courses" element={<CourseListPage />} /> 
+        <Route path="/courses/:courseId" element={<CourseDetailPage />} /> 
         <Route path="/register" element={<RegisterPage />} />
         <Route path="/login" element={<LoginPage />} />
         <Route path="/lessons/:lessonId" element={<LessonPage />} />
+        <Route path="/practice/lessons/:lessonId" element={<PracticeLessonPage />} />
         <Route path="/profile" element={<ProfilePage />} />
       </Routes>
     </div>

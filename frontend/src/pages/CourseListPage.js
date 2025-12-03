@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import axios from 'axios';
+import apiClient from './api';
 import { Link } from 'react-router-dom';
 
 function CourseListPage() {
@@ -17,7 +17,7 @@ function CourseListPage() {
         // Отправляем GET-запрос на наш backend
         // Мы не используем прокси, так как это простой GET-запрос.
         // Но лучше сразу привыкать к единому стилю
-        const response = await axios.get('/courses');
+        const response = await apiClient.get('/courses');
         setCourses(response.data); // Сохраняем полученные данные в состоянии
         setError('');
       } catch (err) {

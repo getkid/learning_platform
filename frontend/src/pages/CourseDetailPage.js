@@ -1,8 +1,6 @@
-// frontend/src/pages/CourseDetailPage.js
-
 import React, { useState, useEffect } from 'react';
 import { useParams, Link} from 'react-router-dom'; // Хук для получения параметров из URL
-import axios from 'axios';
+import apiClient from './api';
 
 function CourseDetailPage() {
   // useParams() вернет объект { courseId: "1" } из URL /courses/1
@@ -16,12 +14,12 @@ function CourseDetailPage() {
     const fetchCourse = async () => {
       try {
         // Делаем запрос на новый эндпоинт, используя courseId из URL
-        const response = await axios.get(`/courses/${courseId}`);
+        const response = await apiClient.get(`/courses/${courseId}`);
         setCourse(response.data);
         setError('');
       } catch (err) {
-        setError('Failed to fetch course details.');
-        console.error(err);
+        setError('Failed to fetch course details. See console for more info.');
+        console.error("Error fetching course details:", err); 
       } finally {
         setLoading(false);
       }
@@ -57,9 +55,14 @@ function CourseDetailPage() {
               {module.lessons.length > 0 ? (
                 module.lessons.map(lesson => (
                   <li key={lesson.id}>
-                    <Link to={`/lessons/${lesson.id}`}>{lesson.title}</Link>
-                  </li>
-                ))
+                    {lesson.lesson_type === 'practice' ? (
+                        <Link to={`/practice/lessons/${lesson.id}`}>{lesson.title}</Link>
+                    ) : (
+                        <Link to={`/lessons/${lesson.id}`}>{lesson.title}</Link>
+                    )}
+                  {lesson.completed && <span style={{ marginLeft: '10px', color: 'green' }}>✔️</span>}
+              </li>
+          ))
               ) : (
                 <li>No lessons in this module.</li>
               )}

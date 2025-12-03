@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
-import axios from 'axios';
+import apiClient from './api';
 
 function LessonPage() {
   // Получаем lessonId из URL (например, "1" из /lessons/1)
@@ -16,7 +16,7 @@ function LessonPage() {
     const fetchLesson = async () => {
       try {
         // Запрашиваем данные для конкретного урока
-        const response = await axios.get(`/lessons/${lessonId}`);
+        const response = await apiClient.get(`/lessons/${lessonId}`);
         setLesson(response.data);
         setError('');
       } catch (err) {

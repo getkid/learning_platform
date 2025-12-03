@@ -2,6 +2,7 @@ from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Text, func
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from database import Base
+from sqlalchemy import UniqueConstraint
 
 class User(Base):
     __tablename__ = "users"
@@ -34,3 +35,16 @@ class Lesson(Base):
     lesson_type = Column(String, default="text") # Например, 'text', 'video', 'quiz'
     module_id = Column(Integer, ForeignKey("modules.id"))
     module = relationship("Module", back_populates="lessons")
+
+class UserLessonProgress(Base):
+    __tablename__ = 'user_lesson_progress'
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey('users.id'))
+    lesson_id = Column(Integer, ForeignKey('lessons.id'))
+    completed_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    user = relationship("User")
+    lesson = relationship("Lesson")
+    
+    # Гарантируем, что пара (user_id, lesson_id) будет уникальной
+    __table_args__ = (UniqueConstraint('user_id', 'lesson_id', name='_user_lesson_uc'),)

@@ -1,5 +1,3 @@
-# backend/code_executor_service/main.py
-
 import pika
 import json
 import subprocess
@@ -9,22 +7,16 @@ import os
 RABBITMQ_URL = os.getenv("RABBITMQ_URL", "amqp://guest:guest@rabbitmq:5672/")
 
 def execute_code(code: str):
-    """
-    Безопасно выполняет код в отдельном процессе.
-    В реальном проекте здесь был бы вызов Docker-контейнера.
-    Для простоты мы используем subprocess.
-    """
     try:
-        # Создаем временный файл с кодом
+
         with open("temp_code.py", "w") as f:
             f.write(code)
         
-        # Запускаем код и получаем результат
         result = subprocess.run(
             ["python", "temp_code.py"],
             capture_output=True,
             text=True,
-            timeout=5 # Ограничение по времени выполнения
+            timeout=5 
         )
 
         if result.returncode == 0:
@@ -41,18 +33,26 @@ def execute_code(code: str):
 
 
 def on_message_received(ch, method, properties, body):
-    """
-    Обработчик сообщений из RabbitMQ.
-    """
     data = json.loads(body)
-    print(f"--> Received submission: {data['submission_id']}", flush=True)
+    submission_id = data.get('submission_id')
+    print(f"--> Received submission: {submission_id}", flush=True)
     
-    # Выполняем код
     result = execute_code(data['code'])
     
-    print(f"<-- Result for {data['submission_id']}: {result['status']}", flush=True)
+    result_message = {
+        "submission_id": submission_id,
+        "status": result.get('status'),
+        "output": result.get('output')
+    }
+    
+    ch.basic_publish(
+        exchange='',
+        routing_key='result_queue', 
+        body=json.dumps(result_message),
+        properties=pika.BasicProperties(delivery_mode=2)
+    )
 
-    # !!! В будущем здесь будет отправка результата обратно в core_service !!!
+    print(f"<-- Result for {submission_id} sent back", flush=True)
     ch.basic_ack(delivery_tag=method.delivery_tag)
 
 

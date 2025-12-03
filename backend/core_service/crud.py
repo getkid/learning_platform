@@ -44,3 +44,23 @@ def get_course_by_id(db: Session, course_id: int):
 def get_lesson_by_id(db: Session, lesson_id: int):
     """Получить один урок по его ID."""
     return db.query(models.Lesson).filter(models.Lesson.id == lesson_id).first()
+
+def mark_lesson_as_completed(db: Session, user_id: int, lesson_id: int):
+    """Отметить урок как пройденный для пользователя."""
+    db_progress = db.query(models.UserLessonProgress).filter_by(user_id=user_id, lesson_id=lesson_id).first()
+    if not db_progress:
+        db_progress = models.UserLessonProgress(user_id=user_id, lesson_id=lesson_id)
+        db.add(db_progress)
+        db.commit()
+        db.refresh(db_progress)
+    return db_progress
+
+def get_completed_lessons_for_user(db: Session, user_id: int, course_id: int):
+    """Получить ID всех пройденных уроков пользователя в рамках одного курса."""
+    completed_lessons = db.query(models.UserLessonProgress.lesson_id)\
+        .join(models.Lesson)\
+        .filter(
+            models.UserLessonProgress.user_id == user_id,
+            models.Lesson.module.has(course_id=course_id)
+        ).all()
+    return {lesson_id for lesson_id, in completed_lessons}

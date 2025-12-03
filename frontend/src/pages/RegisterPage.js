@@ -1,27 +1,27 @@
 import React, { useState } from 'react';
-import axios from 'axios'; 
+import apiClient from './api';
 
 function RegisterPage() {
   // Создаем состояния для хранения email и пароля
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [message, setMessage] = useState(''); // Для вывода сообщений об успехе/ошибке
+  const [message, setMessage] = useState(''); 
 
   // Функция, которая будет вызываться при отправке формы
   const handleSubmit = async (event) => {
-    event.preventDefault(); // Предотвращаем стандартное поведение формы (перезагрузку страницы)
-    setMessage(''); // Сбрасываем сообщение перед новым запросом
+    event.preventDefault(); 
+    setMessage(''); 
 
     try {
       // Отправляем POST-запрос на наш backend
-      const response = await axios.post('/users/register', {
+      const response = await apiClient.post('/users/register', {
         email: email,
         password: password,
       });
 
       // Если запрос успешен (статус 201), выводим сообщение
       setMessage(`User ${response.data.email} created successfully!`);
-      setEmail(''); // Очищаем поля формы
+      setEmail(''); 
       setPassword('');
 
     } catch (error) {
@@ -59,7 +59,6 @@ function RegisterPage() {
         <button type="submit" style={{ marginTop: '10px' }}>Register</button>
       </form>
 
-      {/* Отображаем сообщение, если оно есть */}
       {message && <p style={{ marginTop: '20px' }}>{message}</p>}
     </div>
   );
