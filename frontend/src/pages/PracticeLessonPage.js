@@ -17,7 +17,7 @@ function PracticeLessonPage() {
   const [error, setError] = useState('');
 
   // Состояние для кода, который пишет пользователь
-  const [code, setCode] = useState("# Введите ваш код здесь\nprint('Привет, мир!')");
+  const [code, setCode] = useState("# Напишите функцию, которая возвращает 'Привет из Python'\ndef get_greeting():\n  # ваш код здесь\n  return \"...\"");
   
   // Состояния для процесса выполнения
   const [output, setOutput] = useState('');
