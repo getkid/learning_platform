@@ -2,34 +2,71 @@ import pika
 import json
 import subprocess
 import os
-
+import time
 
 RABBITMQ_URL = os.getenv("RABBITMQ_URL", "amqp://guest:guest@rabbitmq:5672/")
 
-def execute_code(code: str):
-    try:
+def execute_code_with_tests(code: str, test_code: str):
+    solution_filename = "solution.py"
+    test_filename = "test_solution.py"
 
-        with open("temp_code.py", "w") as f:
+    # --- ДОБАВЛЯЕМ ОТЛАДОЧНЫЕ СООБЩЕНИЯ ---
+    print(f"--- Writing code to {solution_filename} ---", flush=True)
+    print(code, flush=True)
+    print("-----------------------------------------", flush=True)
+    
+    print(f"--- Writing tests to {test_filename} ---", flush=True)
+    print(test_code, flush=True)
+    print("-----------------------------------------", flush=True)
+    
+    try:
+        with open(solution_filename, "w", encoding="utf-8") as f:
             f.write(code)
+
+        with open(test_filename, "w", encoding="utf-8") as f:
+            f.write(test_code)
+
+        # Проверяем, что файлы действительно создались
+        if not os.path.exists(test_filename):
+            return {"status": "error", "output": "Internal error: Test file was not created."}
+
+        env = os.environ.copy()
+        env["PYTHONPATH"] = "."
+
+        print(f"--- Running pytest on {test_filename} ---", flush=True)
         
+        # Запускаем pytest и получаем результат
         result = subprocess.run(
-            ["python", "temp_code.py"],
+            ["pytest", "--tb=short", "-q", test_filename],
             capture_output=True,
             text=True,
-            timeout=5 
+            timeout=10,
+            # Указываем рабочую директорию явно, чтобы быть на 100% уверенными
+            cwd="/app",
+            env=env 
         )
+        
+        print(f"--- Pytest finished with code {result.returncode} ---", flush=True)
+        print("STDOUT:", result.stdout, flush=True)
+        print("STDERR:", result.stderr, flush=True)
+        print("----------------------------------------------", flush=True)
 
         if result.returncode == 0:
-            return {"status": "success", "output": result.stdout}
+            return {"status": "success", "output": "Все тесты пройдены успешно!\n\n" + result.stdout}
         else:
-            return {"status": "error", "output": result.stderr}
+            # Код 1 - тесты упали, Код 2 - ошибка использования (как file not found)
+            error_message = result.stdout + result.stderr
+            return {"status": "error", "output": "Тесты не пройдены:\n\n" + error_message}
+
     except subprocess.TimeoutExpired:
-        return {"status": "error", "output": "Execution timed out!"}
+        return {"status": "error", "output": "Выполнение тестов превысило лимит времени!"}
     except Exception as e:
-        return {"status": "error", "output": str(e)}
+        return {"status": "error", "output": f"Произошла внутренняя ошибка: {str(e)}"}
     finally:
-        if os.path.exists("temp_code.py"):
-            os.remove("temp_code.py")
+        if os.path.exists(solution_filename):
+            os.remove(solution_filename)
+        if os.path.exists(test_filename):
+            os.remove(test_filename)
 
 
 def on_message_received(ch, method, properties, body):
@@ -37,8 +74,14 @@ def on_message_received(ch, method, properties, body):
     submission_id = data.get('submission_id')
     print(f"--> Received submission: {submission_id}", flush=True)
     
-    result = execute_code(data['code'])
-    
+    user_code = data.get("code")
+    test_code = data.get("test_code")
+
+    if not test_code:
+        result = {"status": "error", "output": "Для этого урока не найдены тесты."}
+    else:
+        result = execute_code_with_tests(user_code, test_code)
+
     result_message = {
         "submission_id": submission_id,
         "status": result.get('status'),

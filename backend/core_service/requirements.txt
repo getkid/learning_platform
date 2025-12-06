@@ -16,3 +16,4 @@ python-jose[cryptography]
 python-multipart
 
 pymongo
+pytest

@@ -5,6 +5,7 @@ import uuid
 import os
 from typing import List
 from datetime import timedelta
+import textwrap
 
 from pydantic import BaseModel
 
@@ -102,7 +103,14 @@ def startup_event():
             title="Урок 2.1: Числа и строки (Практика)",
             module=py_mod2,
             content="Ваша задача: вывести на экран строку 'Привет из Python'. Используйте функцию print().",
-            lesson_type="practice"
+            lesson_type="practice",
+            test_code=textwrap.dedent("""
+                import pytest
+                from solution import get_greeting
+
+                def test_get_greeting():
+                    assert get_greeting() == 'Привет из Python', "Функция должна возвращать строку 'Привет из Python'"
+            """)
         )
         # --- Курс JS ---
         js_course = models.Course(title="Продвинутый JavaScript", description="Погружение в концепции JS.")
@@ -136,15 +144,16 @@ def register_user(user: schemas.UserCreate, db: Session = Depends(get_db)):
     
     return crud.create_user(db=db, user=user)
 
+@app.get("/users/me", response_model=schemas.UserOut)
+def read_users_me(current_user: models.User = Depends(security.get_current_user)):
+    return current_user
 
 @app.post("/login/token")
 def login_for_access_token(
     form_data: OAuth2PasswordRequestForm = Depends(), 
     db: Session = Depends(get_db)
 ):
-    """
-    Аутентифицирует пользователя и возвращает токен доступа.
-    """
+    
 
     user = crud.get_user_by_email(db, email=form_data.username)
 
@@ -189,9 +198,7 @@ def read_course(
 
 @app.get("/lessons/{lesson_id}", response_model=schemas.Lesson)
 def read_lesson(lesson_id: int, db: Session = Depends(get_db)):
-    """
-    Возвращает полную информацию об уроке по его ID.
-    """
+    
     db_lesson = crud.get_lesson_by_id(db, lesson_id=lesson_id)
     if db_lesson is None:
         raise HTTPException(status_code=404, detail="Lesson not found")
@@ -201,11 +208,15 @@ class SubmissionRequest(BaseModel):
     code: str
 
 @app.post("/lessons/{lesson_id}/submit")
-def submit_code(lesson_id: int, submission: SubmissionRequest, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+def submit_code(
+    lesson_id: int, 
+    submission: SubmissionRequest, 
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(security.get_current_user) # <-- Используем зависимость
+):
     db_lesson = crud.get_lesson_by_id(db, lesson_id=lesson_id)
     if db_lesson is None:
         raise HTTPException(status_code=404, detail="Lesson not found")
-
     try:
         connection = pika.BlockingConnection(pika.URLParameters(RABBITMQ_URL))
         channel = connection.channel()
@@ -215,7 +226,7 @@ def submit_code(lesson_id: int, submission: SubmissionRequest, db: Session = Dep
         submissions_collection.insert_one({
             "_id": submission_id, 
             "status": "pending",
-            "user_id": current_user.id, 
+            "user_id": current_user.id,
             "lesson_id": lesson_id
         })
 
@@ -223,6 +234,7 @@ def submit_code(lesson_id: int, submission: SubmissionRequest, db: Session = Dep
             "submission_id": submission_id,
             "lesson_id": lesson_id,
             "code": submission.code,
+            "test_code": db_lesson.test_code,
         }
 
         channel.basic_publish(
@@ -239,10 +251,15 @@ def submit_code(lesson_id: int, submission: SubmissionRequest, db: Session = Dep
         raise HTTPException(status_code=500, detail="Failed to submit code to executor.")
 
 @app.get("/submissions/{submission_id}")
-def get_submission_status(submission_id: str):
+def get_submission_status(submission_id: str, current_user: models.User = Depends(security.get_current_user)):
+    # Защищаем и этот эндпоинт, чтобы чужие пользователи не могли смотреть результаты
     result = submissions_collection.find_one({"_id": submission_id})
     if not result:
         raise HTTPException(status_code=404, detail="Submission not found")
+    
+    if result.get('user_id') != current_user.id:
+        raise HTTPException(status_code=403, detail="Not authorized to view this submission")
+
     return {
         "submission_id": result["_id"],
         "status": result.get("status"),

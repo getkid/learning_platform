@@ -1,4 +1,4 @@
-import React, { createContext, useState, useContext } from 'react';
+import React, { createContext, useState, useContext, useEffect } from 'react';
 import apiClient from '../pages/api';
 
 const AuthContext = createContext();
@@ -6,6 +6,17 @@ const AuthContext = createContext();
 export const AuthProvider = ({ children }) => {
 
   const [token, setToken] = useState(localStorage.getItem('token'));
+  const [user, setUser] = useState(null);
+
+  const fetchUser = async () => {
+    try {
+      const response = await apiClient.get('/users/me');
+      setUser(response.data);
+    } catch (error) {
+      // Если токен невалидный, выходим из системы
+      logout();
+    }
+  };
 
   // Функция для логина
   const login = async (email, password) => {
@@ -21,6 +32,7 @@ export const AuthProvider = ({ children }) => {
       if (response.data.access_token) {
         setToken(response.data.access_token);
         localStorage.setItem('token', response.data.access_token);
+        await fetchUser();
         return { success: true };
       }
     } catch (error) {
@@ -31,12 +43,20 @@ export const AuthProvider = ({ children }) => {
   // Функция для выхода из системы
   const logout = () => {
     setToken(null);
+    setUser(null);
     localStorage.removeItem('token');
   };
+
+  useEffect(() => {
+    if (token) {
+      fetchUser();
+    }
+  }, [token]);
 
   // Значение, которое будет доступно всем дочерним компонентам
   const value = {
     token,
+    user,
     isAuthenticated: !!token, // Простая проверка: если токен есть, пользователь аутентифицирован
     login,
     logout,

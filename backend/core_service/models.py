@@ -33,6 +33,7 @@ class Lesson(Base):
     title = Column(String, index=True, nullable=False)
     content = Column(Text, nullable=True) # Здесь будет теория или описание задачи
     lesson_type = Column(String, default="text") # Например, 'text', 'video', 'quiz'
+    test_code = Column(Text, nullable=True)
     module_id = Column(Integer, ForeignKey("modules.id"))
     module = relationship("Module", back_populates="lessons")
 
