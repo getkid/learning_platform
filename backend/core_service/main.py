@@ -105,11 +105,8 @@ def startup_event():
             content="Ваша задача: вывести на экран строку 'Привет из Python'. Используйте функцию print().",
             lesson_type="practice",
             test_code=textwrap.dedent("""
-                import pytest
-                from solution import get_greeting
-
-                def test_get_greeting():
-                    assert get_greeting() == 'Привет из Python', "Функция должна возвращать строку 'Привет из Python'"
+                # test_type: stdout
+                # expected_output: Привет из Python
             """)
         )
         # --- Курс JS ---
