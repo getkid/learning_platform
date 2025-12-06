@@ -56,9 +56,11 @@ function CourseDetailPage() {
                 module.lessons.map(lesson => (
                   <li key={lesson.id}>
                     {lesson.lesson_type === 'practice' ? (
-                        <Link to={`/practice/lessons/${lesson.id}`}>{lesson.title}</Link>
+                      <Link to={`/practice/lessons/${lesson.id}`}>{lesson.title}</Link>
+                    ) : lesson.lesson_type === 'quiz' ? ( 
+                      <Link to={`/quiz/lessons/${lesson.id}`}>{lesson.title}</Link>
                     ) : (
-                        <Link to={`/lessons/${lesson.id}`}>{lesson.title}</Link>
+                      <Link to={`/lessons/${lesson.id}`}>{lesson.title}</Link>
                     )}
                   {lesson.completed && <span style={{ marginLeft: '10px', color: 'green' }}>✔️</span>}
               </li>

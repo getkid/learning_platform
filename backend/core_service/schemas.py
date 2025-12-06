@@ -1,4 +1,4 @@
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, Field
 from typing import List, Optional
 import datetime
 
@@ -44,3 +44,25 @@ class CourseFull(BaseModel):
     modules: List[Module] = []
     class Config:
         from_attributes = True 
+
+# Схема для вариантов ответа
+class QuestionOptions(BaseModel):
+    options: List[str]
+
+# Схема для вопроса, которую мы отдаем (без правильного ответа!)
+class QuestionOut(BaseModel):
+    id: int
+    question_text: str
+    details: QuestionOptions # Используем вложенную схему
+    class Config:
+        from_attributes = True
+
+# Схема для результата проверки одного ответа
+class AnswerResult(BaseModel):
+    question_id: int
+    is_correct: bool
+    correct_answer: str
+
+class AnswerIn(BaseModel):
+    question_id: int
+    answer: str

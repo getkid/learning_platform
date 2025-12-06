@@ -88,32 +88,54 @@ def listen_for_results():
 def startup_event():
     # --- ЧАСТЬ 1: Создание тестовых данных ---
     db = SessionLocal()
-    first_course = db.query(models.Course).first()
-    if not first_course:
-        print("База данных курсов пуста. Создаю тестовые данные...", flush=True)
-        # --- Курс Python ---
-        py_course = models.Course(title="Python для начинающих", description="Изучите основы программирования на Python.")
-        py_mod1 = models.Module(title="Модуль 1: Введение", course=py_course)
-        py_mod2 = models.Module(title="Модуль 2: Типы данных", course=py_course)
-        
-        models.Lesson(title="Урок 1.1: Что такое Python?", module=py_mod1, content="Python - это высокоуровневый язык программирования...")
-        models.Lesson(title="Урок 1.2: Установка", module=py_mod1, content="Для установки Python перейдите на официальный сайт python.org...")
-        
-        models.Lesson(
-            title="Урок 2.1: Числа и строки (Практика)",
-            module=py_mod2,
-            content="Ваша задача: вывести на экран строку 'Привет из Python'. Используйте функцию print().",
-            lesson_type="practice",
-            test_code=textwrap.dedent("""
-                # test_type: stdout
-                # expected_output: Привет из Python
-            """)
-        )
-        # --- Курс JS ---
-        js_course = models.Course(title="Продвинутый JavaScript", description="Погружение в концепции JS.")
+    # 1. Создаем курсы
+    py_course = models.Course(title="Python для начинающих", description="Изучите основы программирования на Python.")
+    js_course = models.Course(title="Продвинутый JavaScript", description="Погружение в концепции JS.")
 
-        db.add_all([py_course, js_course])
-        db.commit()
+    # 2. Создаем модули и привязываем их к курсам
+    py_mod1 = models.Module(title="Модуль 1: Введение", course=py_course)
+    py_mod2 = models.Module(title="Модуль 2: Типы данных", course=py_course)
+
+    # 3. Создаем уроки и привязываем их к модулям
+    lesson1 = models.Lesson(title="Урок 1.1: Что такое Python?", module=py_mod1, content="Python - это высокоуровневый язык программирования...")
+    lesson2 = models.Lesson(title="Урок 1.2: Установка", module=py_mod1, content="Для установки Python перейдите на официальный сайт python.org...")
+    quiz_lesson = models.Lesson(title="Урок 1.3: Проверка знаний (Квиз)", module=py_mod1, content="Проверьте свои знания по основам Python.", lesson_type="quiz")
+    practice_lesson = models.Lesson(
+        title="Урок 2.1: Числа и строки (Практика)",
+        module=py_mod2,
+        content="Ваша задача: написать функцию get_greeting(), которая ВОЗВРАЩАЕТ (return) строку 'Привет из Python'.",
+        lesson_type="practice",
+        test_code=textwrap.dedent("""
+        # test_type: stdout
+        # expected_output: Привет из Python
+    """)
+    )
+
+    # 4. Добавляем все созданные объекты в сессию ОДНИМ СПИСКОМ
+    db.add_all([
+        py_course, js_course,
+        py_mod1, py_mod2,
+        lesson1, lesson2, quiz_lesson, practice_lesson
+    ])
+    
+    # 5. Делаем flush, чтобы уроки получили свои ID
+    db.flush()
+
+    # 6. Создаем вопросы для квиза, используя ID, полученный после flush
+    q1 = models.Question(
+        lesson_id=quiz_lesson.id,
+        question_text="Какой командой можно вывести текст на экран в Python?",
+        details={"options": ["print()", "console.log()", "echo"], "correct_answer": "print()"}
+    )
+    q2 = models.Question(
+        lesson_id=quiz_lesson.id,
+        question_text="Какой символ используется для однострочных комментариев?",
+        details={"options": ["//", "/* */", "#"], "correct_answer": "#"}
+    )
+    db.add_all([q1, q2])
+
+    # 7. Делаем ОДИН commit в самом конце
+    db.commit()
     db.close()
 
     # --- ЧАСТЬ 2: Запуск фонового слушателя ---
@@ -262,3 +284,22 @@ def get_submission_status(submission_id: str, current_user: models.User = Depend
         "status": result.get("status"),
         "output": result.get("output")
     }
+
+@app.get("/lessons/{lesson_id}/quiz", response_model=List[schemas.QuestionOut])
+def get_quiz_questions(lesson_id: int, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+    db_lesson = crud.get_lesson_by_id(db, lesson_id=lesson_id)
+    if not db_lesson or db_lesson.lesson_type != 'quiz':
+        raise HTTPException(status_code=404, detail="Quiz lesson not found")
+    return crud.get_questions_for_lesson(db, lesson_id=lesson_id)
+
+@app.post("/lessons/{lesson_id}/quiz/submit")
+def submit_quiz(lesson_id: int, answers: List[schemas.AnswerIn], db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+    # Проверяем ответы
+    result_data = crud.submit_quiz_answers(db, user_id=current_user.id, answers=answers)
+    
+    # Если все ответы правильные, считаем урок пройденным
+    if result_data["correct_count"] == result_data["total_count"] and result_data["total_count"] > 0:
+        crud.mark_lesson_as_completed(db, user_id=current_user.id, lesson_id=lesson_id)
+        print(f"Quiz Lesson {lesson_id} marked as completed for user {current_user.id}", flush=True)
+
+    return result_data

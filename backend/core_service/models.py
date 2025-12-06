@@ -1,8 +1,9 @@
-from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Text, func
+from sqlalchemy import Column, Integer, String, DateTime, Text, ForeignKey, UniqueConstraint, Boolean
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from database import Base
 from sqlalchemy import UniqueConstraint
+from sqlalchemy.dialects.postgresql import JSONB
 
 class User(Base):
     __tablename__ = "users"
@@ -49,3 +50,26 @@ class UserLessonProgress(Base):
     
     # Гарантируем, что пара (user_id, lesson_id) будет уникальной
     __table_args__ = (UniqueConstraint('user_id', 'lesson_id', name='_user_lesson_uc'),)
+
+class Question(Base):
+    __tablename__ = 'questions'
+    id = Column(Integer, primary_key=True, index=True)
+    lesson_id = Column(Integer, ForeignKey('lessons.id'))
+    question_text = Column(Text, nullable=False)
+    # Храним варианты ответа и правильный ответ в формате JSON
+    # Пример: {"options": ["A", "B", "C"], "correct_answer": "A"}
+    details = Column(JSONB, nullable=False)
+    
+    lesson = relationship("Lesson")
+
+class QuizAnswer(Base):
+    __tablename__ = 'quiz_answers'
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey('users.id'))
+    question_id = Column(Integer, ForeignKey('questions.id'))
+    selected_answer = Column(String, nullable=False)
+    is_correct = Column(Boolean, nullable=False)
+
+    user = relationship("User")
+    question = relationship("Question")
+    __table_args__ = (UniqueConstraint('user_id', 'question_id', name='_user_question_uc'),)

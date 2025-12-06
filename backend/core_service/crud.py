@@ -1,6 +1,7 @@
 from sqlalchemy.orm import Session, joinedload
 import models
 import schemas
+from typing import List
 from passlib.context import CryptContext
 
 
@@ -64,3 +65,53 @@ def get_completed_lessons_for_user(db: Session, user_id: int, course_id: int):
             models.Lesson.module.has(course_id=course_id)
         ).all()
     return {lesson_id for lesson_id, in completed_lessons}
+
+def get_questions_for_lesson(db: Session, lesson_id: int):
+    """Получить все вопросы для урока-квиза."""
+    return db.query(models.Question).filter(models.Question.lesson_id == lesson_id).all()
+
+def submit_quiz_answers(db: Session, user_id: int, answers: List[schemas.AnswerIn]):
+    """Проверить ответы на квиз и сохранить их."""
+    results = []
+    correct_count = 0
+    total_count = len(answers)
+
+    for answer in answers:
+        question = db.query(models.Question).filter(models.Question.id == answer.question_id).first()
+        if not question:
+            continue # Пропускаем, если вопрос не найден
+
+        correct_answer = question.details.get("correct_answer")
+        is_correct = (answer.answer == correct_answer)
+        if is_correct:
+            correct_count += 1
+        
+        # Сначала ищем существующий ответ
+        db_answer = db.query(models.QuizAnswer).filter_by(
+            user_id=user_id, 
+            question_id=answer.question_id
+        ).first()
+
+        if db_answer:
+            # Если ответ уже есть - ОБНОВЛЯЕМ его
+            db_answer.selected_answer = answer.answer
+            db_answer.is_correct = is_correct
+        else:
+            # Если ответа нет - СОЗДАЕМ новый
+            db_answer = models.QuizAnswer(
+                user_id=user_id,
+                question_id=answer.question_id,
+                selected_answer=answer.answer,
+                is_correct=is_correct
+            )
+            db.add(db_answer)
+        
+        results.append({
+            "question_id": answer.question_id,
+            "is_correct": is_correct,
+            "correct_answer": correct_answer
+        })
+    
+    # Коммитим все изменения (и новые, и обновленные) один раз
+    db.commit()
+    return {"results": results, "correct_count": correct_count, "total_count": total_count}

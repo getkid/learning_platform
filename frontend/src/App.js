@@ -8,6 +8,7 @@ import CourseListPage from './pages/CourseListPage';
 import CourseDetailPage from './pages/CourseDetailPage';
 import LessonPage from './pages/LessonPage';
 import PracticeLessonPage from './pages/PracticeLessonPage';
+import QuizLessonPage from './pages/QuizLessonPage';
 
 const HomePage = () => <h1>Home Page</h1>;
 const ProfilePage = () => <h1>User Profile Page</h1>;
@@ -41,6 +42,7 @@ function App() {
           <Route path="/courses/:courseId" element={<CourseDetailPage />} />
           <Route path="/lessons/:lessonId" element={<LessonPage />} />
           <Route path="/practice/lessons/:lessonId" element={<PracticeLessonPage />} />
+          <Route path="/quiz/lessons/:lessonId" element={<QuizLessonPage />} /> 
           <Route path="/register" element={<RegisterPage />} />
           <Route path="/login" element={<LoginPage />} />
           <Route path="/profile" element={<ProfilePage />} />
