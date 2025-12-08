@@ -1,24 +1,37 @@
-import React, { createContext, useState, useContext, useEffect } from 'react';
+import React, { createContext, useState, useEffect, useContext, useCallback } from 'react'; // 1. Добавляем useCallback
 import apiClient from '../pages/api';
 
 const AuthContext = createContext();
 
 export const AuthProvider = ({ children }) => {
-
   const [token, setToken] = useState(localStorage.getItem('token'));
   const [user, setUser] = useState(null);
+  const [loading, setLoading] = useState(true);
 
-  const fetchUser = async () => {
-    try {
-      const response = await apiClient.get('/users/me');
-      setUser(response.data);
-    } catch (error) {
-      // Если токен невалидный, выходим из системы
-      logout();
+  const logout = useCallback(() => {
+    setToken(null);
+    setUser(null);
+    localStorage.removeItem('token');
+  }, []);
+  
+  // 2. Выносим fetchUser за пределы useEffect
+  const fetchUser = useCallback(async () => {
+    if (localStorage.getItem('token')) {
+      try {
+        const res = await apiClient.get('/users/me');
+        setUser(res.data);
+      } catch (error) {
+        console.error("Невалидный токен, выход из системы");
+        logout(); 
+      }
     }
-  };
+    setLoading(false);
+  }, [logout]);
 
-  // Функция для логина
+  useEffect(() => {
+    fetchUser(); // 3. Просто вызываем ее здесь
+  }, [fetchUser]);
+
   const login = async (email, password) => {
     const params = new URLSearchParams();
     params.append('username', email);
@@ -30,9 +43,15 @@ export const AuthProvider = ({ children }) => {
       });
 
       if (response.data.access_token) {
-        setToken(response.data.access_token);
-        localStorage.setItem('token', response.data.access_token);
-        await fetchUser();
+        const token = response.data.access_token;
+        setToken(token);
+        localStorage.setItem('token', token);
+        const userResponse = await apiClient.get('/users/me', {
+          headers: {
+            Authorization: `Bearer ${token}`
+          }
+        });
+        setUser(userResponse.data);
         return { success: true };
       }
     } catch (error) {
@@ -40,31 +59,17 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  // Функция для выхода из системы
-  const logout = () => {
-    setToken(null);
-    setUser(null);
-    localStorage.removeItem('token');
-  };
-
-  useEffect(() => {
-    if (token) {
-      fetchUser();
-    }
-  }, [token]);
-
-  // Значение, которое будет доступно всем дочерним компонентам
   const value = {
     token,
     user,
-    isAuthenticated: !!token, // Простая проверка: если токен есть, пользователь аутентифицирован
+    isAuthenticated: !!user,
+    loading,
     login,
     logout,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };
-
 
 export const useAuth = () => {
   return useContext(AuthContext);

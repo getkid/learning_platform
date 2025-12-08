@@ -115,3 +115,10 @@ def submit_quiz_answers(db: Session, user_id: int, answers: List[schemas.AnswerI
     # Коммитим все изменения (и новые, и обновленные) один раз
     db.commit()
     return {"results": results, "correct_count": correct_count, "total_count": total_count}
+
+def get_all_completed_lessons_for_user(db: Session, user_id: int):
+    """Получить ID ВСЕХ пройденных уроков пользователя."""
+    completed_lessons = db.query(models.UserLessonProgress.lesson_id).filter(
+        models.UserLessonProgress.user_id == user_id
+    ).all()
+    return {lesson_id for lesson_id, in completed_lessons}

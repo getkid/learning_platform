@@ -68,6 +68,49 @@ def listen_for_results():
             {"$set": {"status": data.get('status'), "output": data.get('output')}},
             upsert=True
         )
+
+        if data.get('status') == 'error':
+            submission_data = submissions_collection.find_one({"_id": submission_id})
+            if submission_data:
+                user_id = submission_data.get('user_id')
+                lesson_id = submission_data.get('lesson_id')
+                user_code = submission_data.get('code') # Получаем код пользователя
+
+                if all([user_id, lesson_id, user_code]):
+                    db = SessionLocal()
+                    db_lesson = crud.get_lesson_by_id(db, lesson_id=lesson_id)
+                    if db_lesson:
+                        try:
+                            connection = pika.BlockingConnection(pika.URLParameters(RABBITMQ_URL))
+                            channel = connection.channel()
+                            channel.queue_declare(queue='ai_event_queue', durable=True)
+                            
+                            ai_message = {
+                                "user_id": user_id,
+                                "lesson_id": lesson_id,
+                                "user_code": user_code,
+                                "test_result": { # <-- Передаем результат теста
+                                    "output_log": data.get('output')
+                                },
+                                "lesson_context": { # <-- Передаем контекст урока
+                                    "lesson_content": db_lesson.content,
+                                    "test_code": db_lesson.test_code,
+                                    "expected_constructs": db_lesson.expected_constructs
+                                }
+                            }
+                            
+                            channel.basic_publish(
+                                exchange='',
+                                routing_key='ai_event_queue',
+                                body=json.dumps(ai_message),
+                                properties=pika.BasicProperties(delivery_mode=2)
+                            )
+                            connection.close()
+                            print(f"Event sent to AI service for user {user_id}, lesson {lesson_id}", flush=True)
+                        except Exception as e:
+                            print(f"Failed to send event to AI service: {e}", flush=True)
+                    db.close()
+
         if data.get('status') == 'success':
             submission_data = submissions_collection.find_one({"_id": submission_id})
             if submission_data:
@@ -88,54 +131,65 @@ def listen_for_results():
 def startup_event():
     # --- ЧАСТЬ 1: Создание тестовых данных ---
     db = SessionLocal()
-    # 1. Создаем курсы
-    py_course = models.Course(title="Python для начинающих", description="Изучите основы программирования на Python.")
-    js_course = models.Course(title="Продвинутый JavaScript", description="Погружение в концепции JS.")
+    first_course = db.query(models.Course).first()
 
-    # 2. Создаем модули и привязываем их к курсам
-    py_mod1 = models.Module(title="Модуль 1: Введение", course=py_course)
-    py_mod2 = models.Module(title="Модуль 2: Типы данных", course=py_course)
+    # Весь код создания данных должен быть внутри этого 'if'
+    if not first_course:
+        print("База данных курсов пуста. Создаю тестовые данные...", flush=True)
+        
+        # 1. Создаем курсы
+        py_course = models.Course(title="Python для начинающих", description="Изучите основы программирования на Python.")
+        js_course = models.Course(title="Продвинутый JavaScript", description="Погружение в концепции JS.")
 
-    # 3. Создаем уроки и привязываем их к модулям
-    lesson1 = models.Lesson(title="Урок 1.1: Что такое Python?", module=py_mod1, content="Python - это высокоуровневый язык программирования...")
-    lesson2 = models.Lesson(title="Урок 1.2: Установка", module=py_mod1, content="Для установки Python перейдите на официальный сайт python.org...")
-    quiz_lesson = models.Lesson(title="Урок 1.3: Проверка знаний (Квиз)", module=py_mod1, content="Проверьте свои знания по основам Python.", lesson_type="quiz")
-    practice_lesson = models.Lesson(
-        title="Урок 2.1: Числа и строки (Практика)",
-        module=py_mod2,
-        content="Ваша задача: написать функцию get_greeting(), которая ВОЗВРАЩАЕТ (return) строку 'Привет из Python'.",
-        lesson_type="practice",
-        test_code=textwrap.dedent("""
-        # test_type: stdout
-        # expected_output: Привет из Python
-    """)
-    )
+        # 2. Создаем модули и привязываем их к курсам
+        py_mod1 = models.Module(title="Модуль 1: Введение", course=py_course)
+        py_mod2 = models.Module(title="Модуль 2: Типы данных", course=py_course)
 
-    # 4. Добавляем все созданные объекты в сессию ОДНИМ СПИСКОМ
-    db.add_all([
-        py_course, js_course,
-        py_mod1, py_mod2,
-        lesson1, lesson2, quiz_lesson, practice_lesson
-    ])
-    
-    # 5. Делаем flush, чтобы уроки получили свои ID
-    db.flush()
+        # 3. Создаем уроки и привязываем их к модулям
+        lesson1 = models.Lesson(title="Урок 1.1: Что такое Python?", module=py_mod1, content="Python - это высокоуровневый язык программирования...")
+        lesson2 = models.Lesson(title="Урок 1.2: Установка", module=py_mod1, content="Для установки Python перейдите на официальный сайт python.org...")
+        quiz_lesson = models.Lesson(title="Урок 1.3: Проверка знаний (Квиз)", module=py_mod1, content="Проверьте свои знания по основам Python.", lesson_type="quiz")
+        practice_lesson = models.Lesson(
+            title="Урок 2.1: Числа и строки (Практика)",
+            module=py_mod2,
+            content="Ваша задача: написать функцию get_greeting(), которая ВОЗВРАЩАЕТ (return) строку 'Привет из Python'.",
+            lesson_type="practice",
+            test_code=textwrap.dedent("""
+                import pytest
+                from solution import get_greeting
 
-    # 6. Создаем вопросы для квиза, используя ID, полученный после flush
-    q1 = models.Question(
-        lesson_id=quiz_lesson.id,
-        question_text="Какой командой можно вывести текст на экран в Python?",
-        details={"options": ["print()", "console.log()", "echo"], "correct_answer": "print()"}
-    )
-    q2 = models.Question(
-        lesson_id=quiz_lesson.id,
-        question_text="Какой символ используется для однострочных комментариев?",
-        details={"options": ["//", "/* */", "#"], "correct_answer": "#"}
-    )
-    db.add_all([q1, q2])
+                def test_get_greeting():
+                    assert get_greeting() == 'Привет из Python', "Функция должна возвращать строку 'Привет из Python'"
+            """),
+            expected_constructs=["return"]
+        )
 
-    # 7. Делаем ОДИН commit в самом конце
-    db.commit()
+        # 4. Добавляем все основные объекты в сессию ОДНИМ СПИСКОМ
+        db.add_all([
+            py_course, js_course,
+            py_mod1, py_mod2,
+            lesson1, lesson2, quiz_lesson, practice_lesson
+        ])
+        
+        # 5. Делаем flush, чтобы уроки (особенно quiz_lesson) получили свои ID
+        db.flush()
+
+        # 6. Теперь, когда у quiz_lesson есть ID, создаем для него вопросы
+        q1 = models.Question(
+            lesson_id=quiz_lesson.id,
+            question_text="Какой командой можно вывести текст на экран в Python?",
+            details={"options": ["print()", "console.log()", "echo"], "correct_answer": "print()"}
+        )
+        q2 = models.Question(
+            lesson_id=quiz_lesson.id,
+            question_text="Какой символ используется для однострочных комментариев?",
+            details={"options": ["//", "/* */", "#"], "correct_answer": "#"}
+        )
+        db.add_all([q1, q2])
+        
+        # 7. Делаем ОДИН commit в самом конце, чтобы сохранить все изменения
+        db.commit()
+
     db.close()
 
     # --- ЧАСТЬ 2: Запуск фонового слушателя ---
@@ -246,7 +300,8 @@ def submit_code(
             "_id": submission_id, 
             "status": "pending",
             "user_id": current_user.id,
-            "lesson_id": lesson_id
+            "lesson_id": lesson_id,
+            "code": submission.code
         })
 
         message = {
@@ -303,3 +358,23 @@ def submit_quiz(lesson_id: int, answers: List[schemas.AnswerIn], db: Session = D
         print(f"Quiz Lesson {lesson_id} marked as completed for user {current_user.id}", flush=True)
 
     return result_data
+
+
+@app.get("/internal/lessons/{lesson_id}", response_model=schemas.LessonInfoForAI)
+def get_lesson_info_for_internal_use(lesson_id: int, db: Session = Depends(get_db)):
+    db_lesson = crud.get_lesson_by_id(db, lesson_id=lesson_id)
+    if not db_lesson:
+        raise HTTPException(404, "Lesson not found")
+    
+    return {
+        "id": db_lesson.id,
+        "title": db_lesson.title,
+        "course_id": db_lesson.module.course_id,
+        "lesson_type": db_lesson.lesson_type
+    }
+
+
+@app.get("/internal/users/{user_id}/completed-lessons", response_model=List[int])
+def get_user_completed_lessons(user_id: int, db: Session = Depends(get_db)):
+    completed_ids = crud.get_all_completed_lessons_for_user(db, user_id=user_id)
+    return list(completed_ids)

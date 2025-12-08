@@ -9,12 +9,17 @@ import CourseDetailPage from './pages/CourseDetailPage';
 import LessonPage from './pages/LessonPage';
 import PracticeLessonPage from './pages/PracticeLessonPage';
 import QuizLessonPage from './pages/QuizLessonPage';
+import Recommendations from './components/Recommendations';
 
 const HomePage = () => <h1>Home Page</h1>;
 const ProfilePage = () => <h1>User Profile Page</h1>;
 
 function App() {
-  const { isAuthenticated, logout, user } = useAuth();
+  const { isAuthenticated, logout, user, loading } = useAuth();
+
+  if (loading) {
+    return <div>Загрузка...</div>
+  }
 
   return (
     <div>
@@ -35,6 +40,7 @@ function App() {
         )}
       </nav>
       <hr />
+      {isAuthenticated && <Recommendations />}
       <div style={{ padding: '20px' }}>
         <Routes>
           <Route path="/" element={<HomePage />} />

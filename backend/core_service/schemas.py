@@ -66,3 +66,10 @@ class AnswerResult(BaseModel):
 class AnswerIn(BaseModel):
     question_id: int
     answer: str
+
+class LessonInfoForAI(BaseModel):
+    id: int
+    title: str
+    course_id: int
+    lesson_type: str
+    

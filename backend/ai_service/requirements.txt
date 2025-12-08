@@ -1,2 +1,11 @@
 fastapi
 uvicorn[standard]
+
+pika
+
+pymongo
+
+sentence-transformers
+scikit-learn
+
+requests
