@@ -15,9 +15,7 @@ function PracticeLessonPage() {
   const [lesson, setLesson] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-
-  // Состояние для кода, который пишет пользователь
-  const [code, setCode] = useState("# Напишите функцию, которая возвращает 'Привет из Python'\ndef get_greeting():\n  # ваш код здесь\n  return \"...\"");
+  const [code, setCode] = useState("");
   
   // Состояния для процесса выполнения
   const [output, setOutput] = useState('');
@@ -82,8 +80,7 @@ function PracticeLessonPage() {
       try {
         const response = await apiClient.get(`/lessons/${lessonId}`);
         setLesson(response.data);
-        // Можно установить начальный код, если он будет приходить с бэкенда
-        // setCode(response.data.initial_code || "# Введите ваш код здесь...");
+        setCode(response.data.starter_code || "# Введите ваш код здесь");
       } catch (err) {
         setError('Не удалось загрузить урок.');
         console.error(err);

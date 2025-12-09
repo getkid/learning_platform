@@ -10,6 +10,7 @@ from pymongo import MongoClient
 from fastapi.middleware.cors import CORSMiddleware
 from sklearn.cluster import DBSCAN
 import numpy as np
+from scipy.spatial.distance import cosine
 
 app = FastAPI(title="AI Service")
 
@@ -53,30 +54,27 @@ def process_error_event(data: dict):
     lesson_context = data.get("lesson_context", {}) # Получаем вложенный объект
     lesson_content = lesson_context.get("lesson_content")
     
-    test_result = data.get("test_result", {})
-    output_log = test_result.get("output_log")
-    # ------------------------------------------------
-
-    if not all([user_id, lesson_id, user_code, lesson_content]):
-        print(f"AI Service: Received incomplete data from core_service, skipping.", flush=True)
+    if not lesson_content:
+        print("AI Service: lesson_content not found in event, skipping vectorization.", flush=True)
         return
-
-    # Превращаем описание урока в вектор (эмбеддинг)
+    
+    # Генерируем вектор и ДОБАВЛЯЕМ его в lesson_context
     content_vector = model.encode(lesson_content).tolist()
+    lesson_context['content_vector'] = content_vector # <-- ДОБАВЛЯЕМ ВЕКТОР ВНУТРЬ
 
-    # Сохраняем ВСЮ информацию об ошибке в MongoDB
+    # Сохраняем новую, полную структуру
     error_logs_collection.insert_one({
-        "user_id": user_id,
-        "lesson_id": lesson_id,
+        "user_id": data.get("user_id"),
+        "lesson_id": data.get("lesson_id"),
         "timestamp": time.time(),
         "code_analysis": {
-            "user_code": user_code
-            # В будущем здесь будет анализ AST
+            "user_code": data.get("user_code")
         },
-        "lesson_context": lesson_context,
-        "test_result": test_result,
+        "lesson_context": lesson_context, # <-- Сохраняем весь объект
+        "test_result": data.get("test_result", {})
     })
-    print(f"AI Service: Logged full error details for user {user_id} on lesson {lesson_id}", flush=True)
+    
+    print(f"AI Service: Logged full error details for user {data.get('user_id')} on lesson {data.get('lesson_id')}", flush=True)
 
 # --- 5. Слушатель RabbitMQ (запускается в отдельном потоке) ---
 def listen_for_events():
@@ -127,16 +125,23 @@ def get_recommendations(user_id: int):
     }
     errors = list(error_logs_collection.find(query).sort("timestamp", -1).limit(30))
 
-    if len(errors) < 3: # Если ошибок слишком мало, кластеризация бессмысленна
+    if len(errors) >= 2:
+        # Возьмем два самых свежих вектора
+        vector1 = np.array(errors[0]["lesson_context"]["content_vector"])
+        vector2 = np.array(errors[1]["lesson_context"]["content_vector"])
+        # Вычисляем косинусное расстояние (0 - идентичны, 1 - полностью разные)
+        dist = cosine(vector1, vector2)
+        print(f"DEBUG: Cosine distance between last two errors = {dist}", flush=True)
+        print(f"DEBUG: DBSCAN 'eps' is set to 0.9. Is distance < eps? {dist < 0.9}", flush=True)
+    # --- КОНЕЦ ОТЛАДОЧНОГО БЛОКА ---
+
+    if len(errors) < 3: # Вернем порог в 3, чтобы кластеризация имела смысл
         return {"type": "no_recommendation", "message": "Продолжайте учиться!"}
 
-    # 3. Готовим данные для кластеризации
     vectors = np.array([e["lesson_context"]["content_vector"] for e in errors])
     
-    # 4. Запускаем DBSCAN
-    # eps - максимальное расстояние между точками в кластере. Подбирается экспериментально.
-    # min_samples - минимальное количество точек для образования кластера.
-    clustering = DBSCAN(eps=0.5, min_samples=2, metric='cosine').fit(vectors)
+    # Оставляем eps=0.9
+    clustering = DBSCAN(eps=0.9, min_samples=2, metric='cosine').fit(vectors)
     labels = clustering.labels_
 
     # 5. Анализируем результаты

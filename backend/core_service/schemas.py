@@ -19,7 +19,8 @@ class Lesson(BaseModel):
     content: Optional[str] = None
     lesson_type: str
     completed: bool = False
-    test_code: Optional[str] = None 
+    test_code: Optional[str] = None
+    starter_code: Optional[str] = None 
     class Config:
         from_attributes = True 
 

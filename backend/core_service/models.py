@@ -36,6 +36,7 @@ class Lesson(Base):
     lesson_type = Column(String, default="text") # Например, 'text', 'video', 'quiz'
     test_code = Column(Text, nullable=True)
     expected_constructs = Column(JSONB, nullable=True)
+    starter_code = Column(Text, nullable=True)
     module_id = Column(Integer, ForeignKey("modules.id"))
     module = relationship("Module", back_populates="lessons")
 

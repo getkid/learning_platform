@@ -129,30 +129,26 @@ def listen_for_results():
 
 @app.on_event("startup")
 def startup_event():
-    # --- ЧАСТЬ 1: Создание тестовых данных ---
     db = SessionLocal()
     first_course = db.query(models.Course).first()
 
-    # Весь код создания данных должен быть внутри этого 'if'
     if not first_course:
         print("База данных курсов пуста. Создаю тестовые данные...", flush=True)
         
-        # 1. Создаем курсы
+        # --- Курс Python ---
         py_course = models.Course(title="Python для начинающих", description="Изучите основы программирования на Python.")
-        js_course = models.Course(title="Продвинутый JavaScript", description="Погружение в концепции JS.")
-
-        # 2. Создаем модули и привязываем их к курсам
         py_mod1 = models.Module(title="Модуль 1: Введение", course=py_course)
         py_mod2 = models.Module(title="Модуль 2: Типы данных", course=py_course)
-
-        # 3. Создаем уроки и привязываем их к модулям
+        
         lesson1 = models.Lesson(title="Урок 1.1: Что такое Python?", module=py_mod1, content="Python - это высокоуровневый язык программирования...")
         lesson2 = models.Lesson(title="Урок 1.2: Установка", module=py_mod1, content="Для установки Python перейдите на официальный сайт python.org...")
         quiz_lesson = models.Lesson(title="Урок 1.3: Проверка знаний (Квиз)", module=py_mod1, content="Проверьте свои знания по основам Python.", lesson_type="quiz")
-        practice_lesson = models.Lesson(
-            title="Урок 2.1: Числа и строки (Практика)",
+        
+        # --- Урок 1 (старый) ---
+        practice_lesson_1 = models.Lesson(
+            title="Урок 2.1: Функция, возвращающая приветствие",
             module=py_mod2,
-            content="Ваша задача: написать функцию get_greeting(), которая ВОЗВРАЩАЕТ (return) строку 'Привет из Python'.",
+            content="Напишите функцию get_greeting(), которая ВОЗВРАЩАЕТ (return) строку 'Привет из Python'.",
             lesson_type="practice",
             test_code=textwrap.dedent("""
                 import pytest
@@ -161,17 +157,40 @@ def startup_event():
                 def test_get_greeting():
                     assert get_greeting() == 'Привет из Python', "Функция должна возвращать строку 'Привет из Python'"
             """),
-            expected_constructs=["return"]
+            expected_constructs=["return"],
+            starter_code="# Напишите функцию, которая возвращает 'Привет из Python'\ndef get_greeting():\n  # ваш код здесь\n  return \"...\""
         )
 
-        # 4. Добавляем все основные объекты в сессию ОДНИМ СПИСКОМ
+        # --- НОВЫЙ УРОК 2 ---
+        # Он семантически похож на первый, но требует другую функцию и другую строку
+        practice_lesson_2 = models.Lesson(
+            title="Урок 2.2: Функция, возвращающая имя",
+            module=py_mod2,
+            content="Создайте функцию get_name(), которая должна ВЕРНУТЬ ваше имя в виде строки. Например, 'Алексей'.",
+            lesson_type="practice",
+            test_code=textwrap.dedent("""
+                import pytest
+                from solution import get_name
+
+                def test_get_name_returns_string():
+                    name = get_name()
+                    assert isinstance(name, str), "Функция должна возвращать строку (str)"
+                    assert len(name) > 1, "Имя должно быть длиннее одного символа"
+            """),
+            expected_constructs=["return"],
+            starter_code="# Создайте функцию get_name(), которая вернет ваше имя\ndef get_name():\n  # ваш код здесь\n  return \"Алексей\""
+        )
+        
+        # --- Курс JS ---
+        js_course = models.Course(title="Продвинутый JavaScript", description="Погружение в концепции JS.")
+
         db.add_all([
             py_course, js_course,
             py_mod1, py_mod2,
-            lesson1, lesson2, quiz_lesson, practice_lesson
+            lesson1, lesson2, quiz_lesson, 
+            practice_lesson_1, practice_lesson_2 # <-- Добавляем оба урока
         ])
         
-        # 5. Делаем flush, чтобы уроки (особенно quiz_lesson) получили свои ID
         db.flush()
 
         # 6. Теперь, когда у quiz_lesson есть ID, создаем для него вопросы

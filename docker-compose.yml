@@ -48,8 +48,8 @@ services:
       dockerfile: Dockerfile
     container_name: core_service
     command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload --proxy-headers
-    volumes:
-      - ./backend/core_service:/app
+    #volumes:
+    #  - ./backend/core_service:/app
     ports:
       - "8000:8000"
     environment:
@@ -68,8 +68,8 @@ services:
       dockerfile: Dockerfile
     container_name: code_executor_service
     command: python main.py
-    volumes:
-      - ./backend/code_executor_service:/app
+    #volumes:
+    #  - ./backend/code_executor_service:/app
     ports:
       - "8001:8000"
     environment:
@@ -85,8 +85,8 @@ services:
       dockerfile: Dockerfile
     container_name: ai_service
     command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
-    volumes:
-      - ./backend/ai_service:/app
+    #volumes:
+    #  - ./backend/ai_service:/app
     ports:
       - "8002:8000"
     environment:
