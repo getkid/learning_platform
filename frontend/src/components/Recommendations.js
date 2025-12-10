@@ -1,3 +1,5 @@
+// frontend/src/components/Recommendations.js
+
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import axios from 'axios';
@@ -20,31 +22,49 @@ function Recommendations() {
                     console.error("Не удалось загрузить рекомендации:", err);
                 }
             };
-
-            // Запрашиваем рекомендации ОДИН раз при загрузке
             fetchRecs();
         }
-    }, [user]); // Зависимость только от user
+    }, [user]);
 
-    if (!recommendation || recommendation.type !== 'lesson_recommendation') {
+    if (!recommendation || recommendation.type === 'no_recommendation') {
         return null;
     }
 
-    const { lesson } = recommendation;
-    
-    let lessonUrl = `/lessons/${lesson.id}`;
-    if (lesson.lesson_type === 'practice') {
-        lessonUrl = `/practice/lessons/${lesson.id}`;
-    } else if (lesson.lesson_type === 'quiz') {
-        lessonUrl = `/quiz/lessons/${lesson.id}`;
+    // --- НОВАЯ УНИВЕРСАЛЬНАЯ ЛОГИКА ---
+    const { message } = recommendation;
+    // Превращаем оба типа рекомендаций в единый массив уроков
+    const lessons = recommendation.type === 'cluster_recommendation' 
+        ? recommendation.lessons 
+        : [recommendation.lesson]; // Если тип 'lesson_recommendation', создаем массив из одного урока
+
+    // Проверяем, что уроки вообще есть
+    if (!lessons || lessons.length === 0) {
+        return null;
     }
+    // ------------------------------------
 
     return (
-        <div style={{ border: '1px solid orange', padding: '15px', marginTop: '20px', backgroundColor: '#fffbeb' }}>
+        <div style={{ border: '1px solid orange', padding: '15px', marginTop: '20px', backgroundColor: '#fffbeb', borderRadius: '5px' }}>
             <strong> Рекомендация от AI:</strong>
-            <p style={{ margin: '5px 0 0 0' }}>
-                {recommendation.message} <Link to={lessonUrl}>"{lesson.title}"</Link>
-            </p>
+            <p style={{ margin: '5px 0' }}>{message}</p>
+            <ul style={{ margin: '10px 0 0 20px', padding: 0 }}>
+                {lessons.map(lesson => {
+                    if (!lesson) return null; // Защита от пустых элементов
+                    
+                    let lessonUrl = `/lessons/${lesson.id}`;
+                    if (lesson.lesson_type === 'practice') {
+                        lessonUrl = `/practice/lessons/${lesson.id}`;
+                    } else if (lesson.lesson_type === 'quiz') {
+                        lessonUrl = `/quiz/lessons/${lesson.id}`;
+                    }
+                    
+                    return (
+                        <li key={lesson.id}>
+                            <Link to={lessonUrl}>"{lesson.title}"</Link>
+                        </li>
+                    );
+                })}
+            </ul>
         </div>
     );
 }

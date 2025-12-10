@@ -4,6 +4,7 @@ import os
 import threading
 import time
 import requests
+import ast
 from fastapi import FastAPI
 from sentence_transformers import SentenceTransformer
 from pymongo import MongoClient
@@ -40,41 +41,71 @@ error_logs_collection = db.error_logs
 model = SentenceTransformer('paraphrase-multilingual-mpnet-base-v2')
 print("AI Service: Model loaded from cache successfully.", flush=True)
 
-# --- 4. Логика обработки событий ---
+def analyze_code_with_ast(code: str) -> dict:
+    """Анализирует код и извлекает из него синтаксические конструкции."""
+    analysis = {
+        "ast_nodes": set(),
+        "has_return": False,
+        "has_loops": False,
+        "imports": set()
+    }
+    try:
+        tree = ast.parse(code)
+        for node in ast.walk(tree):
+            node_type = type(node).__name__
+            analysis["ast_nodes"].add(node_type)
+            
+            if isinstance(node, ast.Return):
+                analysis["has_return"] = True
+            if isinstance(node, (ast.For, ast.While)):
+                analysis["has_loops"] = True
+            if isinstance(node, ast.Import) or isinstance(node, ast.ImportFrom):
+                for alias in node.names:
+                    analysis["imports"].add(alias.name)
+
+    except SyntaxError as e:
+        analysis["parse_error"] = str(e)
+    
+    analysis["ast_nodes"] = list(analysis["ast_nodes"])
+    analysis["imports"] = list(analysis["imports"])
+    
+    return analysis
+
 def process_error_event(data: dict):
     if not model:
         print("AI Service: Model not loaded, cannot process event.", flush=True)
         return
 
-    # --- ИСПРАВЛЕННАЯ ЛОГИКА ИЗВЛЕЧЕНИЯ ДАННЫХ ---
+    # 1. Извлекаем все данные из входящего сообщения
     user_id = data.get("user_id")
     lesson_id = data.get("lesson_id")
     user_code = data.get("user_code")
-    
-    lesson_context = data.get("lesson_context", {}) # Получаем вложенный объект
+    lesson_context = data.get("lesson_context", {})
     lesson_content = lesson_context.get("lesson_content")
     
-    if not lesson_content:
-        print("AI Service: lesson_content not found in event, skipping vectorization.", flush=True)
+    # 2. Проверяем, что все критически важные данные на месте
+    if not all([user_id, lesson_id, user_code, lesson_content]):
+        print(f"AI Service: Received incomplete data from core_service, skipping.", flush=True)
         return
-    
-    # Генерируем вектор и ДОБАВЛЯЕМ его в lesson_context
-    content_vector = model.encode(lesson_content).tolist()
-    lesson_context['content_vector'] = content_vector # <-- ДОБАВЛЯЕМ ВЕКТОР ВНУТРЬ
 
-    # Сохраняем новую, полную структуру
+    # 3. Выполняем анализ кода с помощью AST
+    code_analysis_results = analyze_code_with_ast(user_code)
+    
+    # 4. Генерируем вектор для описания урока
+    content_vector = model.encode(lesson_content).tolist()
+    lesson_context['content_vector'] = content_vector
+
+    # 5. Сохраняем в MongoDB полную, обогащенную структуру
     error_logs_collection.insert_one({
-        "user_id": data.get("user_id"),
-        "lesson_id": data.get("lesson_id"),
+        "user_id": user_id,
+        "lesson_id": lesson_id,
         "timestamp": time.time(),
-        "code_analysis": {
-            "user_code": data.get("user_code")
-        },
-        "lesson_context": lesson_context, # <-- Сохраняем весь объект
-        "test_result": data.get("test_result", {})
+        "code_analysis": code_analysis_results,  # <-- Результаты AST-анализа
+        "lesson_context": lesson_context,        # <-- Контекст урока с вектором
+        "test_result": data.get("test_result", {}) # <-- Результаты теста
     })
     
-    print(f"AI Service: Logged full error details for user {data.get('user_id')} on lesson {data.get('lesson_id')}", flush=True)
+    print(f"AI Service: Logged full error details with AST analysis for user {user_id} on lesson {lesson_id}", flush=True)
 
 # --- 5. Слушатель RabbitMQ (запускается в отдельном потоке) ---
 def listen_for_events():
@@ -109,65 +140,100 @@ def startup_event():
 
 @app.get("/recommendations/{user_id}")
 def get_recommendations(user_id: int):
-    # 1. Получаем ID пройденных уроков из core_service
+    # 1. Находим ВСЕ недавние ошибки пользователя (до 30 штук)
+    # На этом этапе мы НЕ фильтруем по пройденным урокам
+    errors = list(error_logs_collection.find({"user_id": user_id}).sort("timestamp", -1).limit(30))
+
+    if len(errors) < 2:
+        return {"type": "no_recommendation", "message": "Продолжайте учиться!"}
+
+    # 2. Проводим кластеризацию, чтобы найти "проблемную тему"
+    vectors = np.array([e["lesson_context"]["content_vector"] for e in errors])
+    clustering = DBSCAN(eps=0.9, min_samples=2, metric='cosine').fit(vectors)
+    labels = clustering.labels_
+
+    unique_labels, counts = np.unique(labels[labels != -1], return_counts=True)
+    
+    if len(counts) == 0:
+        return {"type": "no_recommendation", "message": "Ваши ошибки разнообразны!"}
+
+    if len(counts) > 0:
+        largest_cluster_label = unique_labels[counts.argmax()]
+        
+        # Получаем все записи об ошибках из самого большого кластера
+        cluster_errors = [
+            errors[i] for i, label in enumerate(labels) if label == largest_cluster_label
+        ]
+
+        # --- НОВАЯ ЛОГИКА АНАЛИЗА КОДА ---
+        # Возьмем самую последнюю ошибку из кластера для анализа
+        latest_error_in_cluster = cluster_errors[0]
+        code_analysis = latest_error_in_cluster.get("code_analysis", {})
+        lesson_context = latest_error_in_cluster.get("lesson_context", {})
+        expected_constructs = lesson_context.get("expected_constructs", [])
+
+        # Проверяем, использовал ли юзер ожидаемые конструкции
+        for construct in expected_constructs:
+            # 'return' -> 'Return', 'for' -> 'For' и т.д.
+            ast_construct_name = construct.capitalize() 
+            if ast_construct_name not in code_analysis.get("ast_nodes", []):
+                
+                # Нашли конкретную ошибку! Запрашиваем теорию.
+                try:
+                    res = requests.get(f"{CORE_SERVICE_URL}/internal/lessons/{latest_error_in_cluster['lesson_id']}/related-theory")
+                    if res.status_code == 200:
+                        theory_lesson_info = res.json()
+                        return {
+                            "type": "code_analysis_recommendation",
+                            "message": f"Похоже, в этой группе задач вы не использовали ключевую конструкцию '{construct}'. Рекомендуем перечитать теорию:",
+                            "lesson": theory_lesson_info
+                        }
+                except requests.RequestException:
+                    pass # Если не удалось, просто проваливаемся в кластерную рекомендацию
+        # -------------------------------------
+
+        # Если конкретных ошибок в коде не найдено, возвращаем старую кластерную рекомендацию
+        problem_lesson_ids = {e["lesson_id"] for e in cluster_errors}
+    
+    # 3. Собираем ID ВСЕХ уроков из проблемного кластера
+    problem_lesson_ids = {
+        errors[i]["lesson_id"] for i, label in enumerate(labels) if label == largest_cluster_label
+    }
+
+    # --- НОВАЯ ЛОГИКА ФИЛЬТРАЦИИ ---
+    # 4. Теперь запрашиваем у core_service список пройденных уроков
     completed_lessons_ids = set()
     try:
         res = requests.get(f"{CORE_SERVICE_URL}/internal/users/{user_id}/completed-lessons")
         if res.status_code == 200:
             completed_lessons_ids = set(res.json())
     except requests.RequestException:
-        pass # Если core_service недоступен, просто работаем без этой информации
+        pass # Игнорируем ошибку, если core_service недоступен
 
-    # 2. Находим ВСЕ актуальные ошибки пользователя
-    query = {
-        "user_id": user_id,
-        "lesson_id": {"$nin": list(completed_lessons_ids)}
+    # 5. Убираем из проблемных уроков те, что уже пройдены
+    actual_problem_ids = problem_lesson_ids - completed_lessons_ids
+    # --------------------------------
+
+    # 6. Если после фильтрации ничего не осталось, значит, пользователь все исправил
+    if not actual_problem_ids:
+        return {"type": "no_recommendation", "message": "Отличная работа, вы исправили все ошибки по этой теме!"}
+
+    # 7. Запрашиваем информацию по ОСТАВШИМСЯ проблемным урокам
+    problem_lessons_info = []
+    for lesson_id in actual_problem_ids:
+        try:
+            res = requests.get(f"{CORE_SERVICE_URL}/internal/lessons/{lesson_id}")
+            if res.status_code == 200:
+                problem_lessons_info.append(res.json())
+        except requests.RequestException:
+            continue
+    
+    if not problem_lessons_info:
+         return {"type": "no_recommendation", "message": "Не удалось получить детали уроков."}
+
+    # 8. Возвращаем отфильтрованный список
+    return {
+        "type": "cluster_recommendation",
+        "message": "Мы заметили, что у вас возникают трудности с похожими задачами. Рекомендуем попробовать решить их еще раз:",
+        "lessons": problem_lessons_info
     }
-    errors = list(error_logs_collection.find(query).sort("timestamp", -1).limit(30))
-
-    if len(errors) >= 2:
-        # Возьмем два самых свежих вектора
-        vector1 = np.array(errors[0]["lesson_context"]["content_vector"])
-        vector2 = np.array(errors[1]["lesson_context"]["content_vector"])
-        # Вычисляем косинусное расстояние (0 - идентичны, 1 - полностью разные)
-        dist = cosine(vector1, vector2)
-        print(f"DEBUG: Cosine distance between last two errors = {dist}", flush=True)
-        print(f"DEBUG: DBSCAN 'eps' is set to 0.9. Is distance < eps? {dist < 0.9}", flush=True)
-    # --- КОНЕЦ ОТЛАДОЧНОГО БЛОКА ---
-
-    if len(errors) < 3: # Вернем порог в 3, чтобы кластеризация имела смысл
-        return {"type": "no_recommendation", "message": "Продолжайте учиться!"}
-
-    vectors = np.array([e["lesson_context"]["content_vector"] for e in errors])
-    
-    # Оставляем eps=0.9
-    clustering = DBSCAN(eps=0.9, min_samples=2, metric='cosine').fit(vectors)
-    labels = clustering.labels_
-
-    # 5. Анализируем результаты
-    # Находим самый большой кластер (исключая "шум", который DBSCAN помечает как -1)
-    unique_labels, counts = np.unique(labels[labels != -1], return_counts=True)
-    if len(counts) == 0:
-        return {"type": "no_recommendation", "message": "Ваши ошибки разнообразны, продолжайте пробовать!"}
-
-    largest_cluster_label = unique_labels[counts.argmax()]
-    
-    # Находим все уроки, которые попали в этот кластер
-    problem_lesson_ids = [
-        errors[i]["lesson_id"] for i, label in enumerate(labels) if label == largest_cluster_label
-    ]
-    
-    # 6. Формируем рекомендацию
-    # Для простоты возьмем первый урок из проблемного кластера
-    problem_lesson_id = problem_lesson_ids[0]
-    try:
-        res = requests.get(f"{CORE_SERVICE_URL}/internal/lessons/{problem_lesson_id}")
-        lesson_info = res.json()
-        return {
-            "type": "lesson_recommendation",
-            "message": f"Мы заметили, что у вас возникают трудности с задачами, похожими на эту. Попробуйте повторить урок:",
-            "lesson": lesson_info
-        }
-    except Exception:
-        # Откатываемся к простому ответу, если что-то пошло не так
-        return {"type": "simple_recommendation", "message": f"У вас трудности с уроком #{problem_lesson_id}"}
