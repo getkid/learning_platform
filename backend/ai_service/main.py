@@ -138,51 +138,78 @@ def startup_event():
     listener_thread = threading.Thread(target=listen_for_events, daemon=True)
     listener_thread.start()
 
+# backend/ai_service/main.py
+
 @app.get("/recommendations/{user_id}")
 def get_recommendations(user_id: int):
-    # 1. Находим ВСЕ недавние ошибки пользователя (до 30 штук)
-    # На этом этапе мы НЕ фильтруем по пройденным урокам
-    errors = list(error_logs_collection.find({"user_id": user_id}).sort("timestamp", -1).limit(30))
+    # 1. Получаем ID пройденных уроков
+    completed_lessons_ids = set()
+    try:
+        res = requests.get(f"{CORE_SERVICE_URL}/internal/users/{user_id}/completed-lessons")
+        if res.status_code == 200:
+            completed_lessons_ids = set(res.json())
+    except requests.RequestException as e:
+        print(f"AI Service: Could not fetch completed lessons. Error: {e}", flush=True)
 
-    if len(errors) < 2:
+    # 2. Находим ВСЕ недавние ошибки пользователя
+    all_recent_errors = list(error_logs_collection.find({"user_id": user_id}).sort("timestamp", -1).limit(30))
+
+    # 3. Отбираем для анализа только АКТУАЛЬНЫЕ (не пройденные) ошибки
+    actual_errors = [e for e in all_recent_errors if e.get('lesson_id') not in completed_lessons_ids]
+    
+    if len(actual_errors) < 2:
         return {"type": "no_recommendation", "message": "Продолжайте учиться!"}
 
-    # 2. Проводим кластеризацию, чтобы найти "проблемную тему"
-    vectors = np.array([e["lesson_context"]["content_vector"] for e in errors])
+    # 4. Проводим кластеризацию
+    vectors = np.array([e["lesson_context"]["content_vector"] for e in actual_errors])
     clustering = DBSCAN(eps=0.9, min_samples=2, metric='cosine').fit(vectors)
     labels = clustering.labels_
 
     unique_labels, counts = np.unique(labels[labels != -1], return_counts=True)
     
     if len(counts) == 0:
-        return {"type": "no_recommendation", "message": "Ваши ошибки разнообразны!"}
+        return {"type": "no_recommendation", "message": "Ваши ошибки разнообразны, продолжайте пробовать!"}
 
-    if len(counts) > 0:
-        largest_cluster_label = unique_labels[counts.argmax()]
-        
-        # Получаем все записи об ошибках из самого большого кластера
-        cluster_errors = [
-            errors[i] for i, label in enumerate(labels) if label == largest_cluster_label
-        ]
+    largest_cluster_label = unique_labels[counts.argmax()]
+    
+    # 5. Получаем все записи об ошибках из самого большого кластера
+    cluster_errors = [
+        actual_errors[i] for i, label in enumerate(labels) if label == largest_cluster_label
+    ]
+    
+    # --- НАЧАЛО ОТЛАДОЧНОГО БЛОКА ---
+    print("\n--- AI DEBUG START ---", flush=True)
+    
+    latest_error_in_cluster = cluster_errors[0]
+    print(f"Latest error in cluster is for lesson ID: {latest_error_in_cluster.get('lesson_id')}", flush=True)
 
-        # --- НОВАЯ ЛОГИКА АНАЛИЗА КОДА ---
-        # Возьмем самую последнюю ошибку из кластера для анализа
-        latest_error_in_cluster = cluster_errors[0]
-        code_analysis = latest_error_in_cluster.get("code_analysis", {})
-        lesson_context = latest_error_in_cluster.get("lesson_context", {})
-        expected_constructs = lesson_context.get("expected_constructs", [])
+    code_analysis = latest_error_in_cluster.get("code_analysis", {})
+    lesson_context = latest_error_in_cluster.get("lesson_context", {})
+    expected_constructs = lesson_context.get("expected_constructs", [])
+    used_constructs = code_analysis.get("ast_nodes", [])
 
-        # Проверяем, использовал ли юзер ожидаемые конструкции
+    print(f"Expected constructs: {expected_constructs}", flush=True)
+    print(f"Used constructs (from AST): {used_constructs}", flush=True)
+    # --- КОНЕЦ ОТЛАДОЧНОГО БЛОКА ---
+
+    # 6. ПУТЬ 2: Пытаемся найти конкретную ошибку в коде (анализ AST)
+    if expected_constructs:
+        found_specific_error = False
         for construct in expected_constructs:
-            # 'return' -> 'Return', 'for' -> 'For' и т.д.
-            ast_construct_name = construct.capitalize() 
-            if ast_construct_name not in code_analysis.get("ast_nodes", []):
-                
-                # Нашли конкретную ошибку! Запрашиваем теорию.
+            ast_construct_name = construct.capitalize()
+            
+            print(f"Checking for '{ast_construct_name}'... Is it in used constructs? {'Yes' if ast_construct_name in used_constructs else 'NO!'}", flush=True)
+
+            if ast_construct_name not in used_constructs:
+                found_specific_error = True
+                print(f"FOUND SPECIFIC ERROR: User did not use '{construct}'", flush=True)
                 try:
-                    res = requests.get(f"{CORE_SERVICE_URL}/internal/lessons/{latest_error_in_cluster['lesson_id']}/related-theory")
+                    print("Attempting to fetch related theory...", flush=True)
+                    res = requests.get(f"{CORE_SERVICE_URL}/internal/lessons/{latest_error_in_cluster['lesson_id']}")
+                    print(f"Core service response status: {res.status_code}", flush=True)
                     if res.status_code == 200:
                         theory_lesson_info = res.json()
+                        print("--- AI DEBUG END ---\n", flush=True)
                         return {
                             "type": "code_analysis_recommendation",
                             "message": f"Похоже, в этой группе задач вы не использовали ключевую конструкцию '{construct}'. Рекомендуем перечитать теорию:",
@@ -190,37 +217,19 @@ def get_recommendations(user_id: int):
                         }
                 except requests.RequestException:
                     pass # Если не удалось, просто проваливаемся в кластерную рекомендацию
-        # -------------------------------------
+                break # Выходим из цикла, так как нашли первую ошибку
+        
+        if not found_specific_error:
+            print("No specific code error found. Falling back to cluster recommendation.", flush=True)
 
-        # Если конкретных ошибок в коде не найдено, возвращаем старую кластерную рекомендацию
-        problem_lesson_ids = {e["lesson_id"] for e in cluster_errors}
+    print("--- AI DEBUG END ---\n", flush=True)
+    # -------------------------------------
+
+    # 7. ПУТЬ 1: Если конкретных ошибок не найдено, даем общую рекомендацию по кластеру
+    problem_lesson_ids = {e["lesson_id"] for e in cluster_errors}
     
-    # 3. Собираем ID ВСЕХ уроков из проблемного кластера
-    problem_lesson_ids = {
-        errors[i]["lesson_id"] for i, label in enumerate(labels) if label == largest_cluster_label
-    }
-
-    # --- НОВАЯ ЛОГИКА ФИЛЬТРАЦИИ ---
-    # 4. Теперь запрашиваем у core_service список пройденных уроков
-    completed_lessons_ids = set()
-    try:
-        res = requests.get(f"{CORE_SERVICE_URL}/internal/users/{user_id}/completed-lessons")
-        if res.status_code == 200:
-            completed_lessons_ids = set(res.json())
-    except requests.RequestException:
-        pass # Игнорируем ошибку, если core_service недоступен
-
-    # 5. Убираем из проблемных уроков те, что уже пройдены
-    actual_problem_ids = problem_lesson_ids - completed_lessons_ids
-    # --------------------------------
-
-    # 6. Если после фильтрации ничего не осталось, значит, пользователь все исправил
-    if not actual_problem_ids:
-        return {"type": "no_recommendation", "message": "Отличная работа, вы исправили все ошибки по этой теме!"}
-
-    # 7. Запрашиваем информацию по ОСТАВШИМСЯ проблемным урокам
     problem_lessons_info = []
-    for lesson_id in actual_problem_ids:
+    for lesson_id in problem_lesson_ids:
         try:
             res = requests.get(f"{CORE_SERVICE_URL}/internal/lessons/{lesson_id}")
             if res.status_code == 200:
@@ -229,11 +238,14 @@ def get_recommendations(user_id: int):
             continue
     
     if not problem_lessons_info:
-         return {"type": "no_recommendation", "message": "Не удалось получить детали уроков."}
-
-    # 8. Возвращаем отфильтрованный список
-    return {
+         return {"type": "no_recommendation", "message": "Не удалось получить детали проблемных уроков."}
+    
+    response_data = {
         "type": "cluster_recommendation",
-        "message": "Мы заметили, что у вас возникают трудности с похожими задачами. Рекомендуем попробовать решить их еще раз:",
+        "message": "Мы заметили...",
         "lessons": problem_lessons_info
     }
+
+    print(f"FINAL RESPONSE: {response_data}", flush=True)
+
+    return response_data
