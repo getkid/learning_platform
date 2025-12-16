@@ -137,117 +137,149 @@ def startup_event():
         
         print("База данных курсов пуста. Создаю расширенный набор тестовых данных...", flush=True)
         
+        
         # =================================================================
         # === КУРС 1: PYTHON ДЛЯ НАЧИНАЮЩИХ ===============================
         # =================================================================
         py_course = models.Course(
-            title="Python для начинающих", 
-            description="Изучите основы программирования на Python с нуля."
+            title="Python: от новичка до специалиста", 
+            description="Комплексный курс, который проведет вас через все основы языка Python, от самых азов до написания собственных сложных функций и работы со структурами данных."
         )
 
-        # --- Модуль 1: Основы и вывод (для разогрева) ---
-        py_mod1 = models.Module(title="Модуль 1: Первые шаги", course=py_course)
+        # --- Модуль 1: Первые шаги и вывод данных ---
+        py_mod1 = models.Module(title="Модуль 1: Первые шаги и консольный вывод", course=py_course)
         
-        lesson_theory_print = models.Lesson(title="Урок 1.1: Функция print()", module=py_mod1, content="...", lesson_type="text")
+        lesson_m1_t1 = models.Lesson(title="Урок 1.1: Что такое Python?", module=py_mod1, content="...", lesson_type="text")
+        lesson_m1_t2 = models.Lesson(title="Урок 1.2: Функция print()", module=py_mod1, content="...", lesson_type="text")
         
-        lesson_practice_print = models.Lesson(
-            title="Урок 1.2: Практика с print()",
-            module=py_mod1,
-            content="Ваша задача: вывести на экран точную строку 'Я изучаю Python!'",
-            lesson_type="practice",
-            test_code="# test_type: stdout\n# expected_output: Я изучаю Python!",
-            starter_code="print('...')"
+        lesson_m1_p1 = models.Lesson(
+            title="Урок 1.3: Практика - 'Hello, World!'",
+            module=py_mod1, content="Напишите программу, которая выводит на экран точную строку 'Hello, Python!'",
+            lesson_type="practice", test_code="# test_type: stdout\n# expected_output: Hello, Python!",
+            starter_code="# Ваш первый код на Python!\nprint('...')", expected_constructs=["print"]
         )
         
-        # --- Модуль 2: ИТЕРАЦИЯ ПО СПИСКАМ (для демонстрации AI) ---
-        py_mod2 = models.Module(title="Модуль 2: Циклы и Списки", course=py_course)
+        lesson_m1_p2 = models.Lesson(
+            title="Урок 1.4: Практика - Знакомство",
+            module=py_mod1, content="Создайте переменную `name` со своим именем и выведите на экран фразу 'Меня зовут [ваше имя]'.",
+            lesson_type="practice", test_code="# test_type: stdout\n# expected_output: Меня зовут Алексей",
+            starter_code="name = 'Алексей'\nprint(f'Меня зовут {name}')", expected_constructs=["print"]
+        )
 
-        lesson_theory_loops = models.Lesson(
-            title="Урок 2.1: Теория по циклам for",
-            module=py_mod2,
-            content="Цикл for используется для перебора элементов в последовательности (например, в списке). Синтаксис: for элемент in список:",
-            lesson_type="text"
-        )
+        quiz_m1 = models.Lesson(title="Урок 1.5: Квиз по основам", module=py_mod1, content="Проверьте свои знания по базовому синтаксису.", lesson_type="quiz")
+
+        # --- Модуль 2: Переменные и типы данных ---
+        py_mod2 = models.Module(title="Модуль 2: Переменные и типы данных", course=py_course)
         
-        # Задача 1 на итерацию
-        practice_loops_1 = models.Lesson(
-            title="Урок 2.2: Практика - Сумма чисел",
-            module=py_mod2,
-            content="Напишите функцию `calculate_sum`, которая принимает список чисел и ВОЗВРАЩАЕТ их общую сумму.",
+        lesson_m2_t1 = models.Lesson(title="Урок 2.1: Числа (int, float) и строки (str)", module=py_mod2, content="...", lesson_type="text")
+        
+        lesson_m2_p1 = models.Lesson(
+            title="Урок 2.2: Практика - Калькулятор возраста",
+            module=py_mod2, content="Создайте переменные `current_year = 2025` и `birth_year = 1995`. Вычислите и выведите на экран возраст.",
+            lesson_type="practice", test_code="# test_type: stdout\n# expected_output: 30",
+            starter_code="current_year = 2025\nbirth_year = 1995\n# Ваш код здесь\nage = ...\nprint(age)"
+        )
+
+        quiz_m2 = models.Lesson(title="Урок 2.3: Квиз по типам данных", module=py_mod2, content="Проверьте, как вы разбираетесь в типах.", lesson_type="quiz")
+
+        # --- Модуль 3: Условия (if/else) ---
+        py_mod3 = models.Module(title="Модуль 3: Логические условия", course=py_course)
+
+        lesson_m3_t1 = models.Lesson(title="Урок 3.1: Конструкция if-elif-else", module=py_mod3, content="...", lesson_type="text")
+        
+        # Задача 1 на условия
+        practice_m3_p1 = models.Lesson(
+            title="Урок 3.2: Практика - Проверка на совершеннолетие",
+            module=py_mod3, content="Напишите функцию `check_age`, которая принимает возраст `age` и возвращает строку 'Доступ разрешен', если возраст 18 или больше, и 'Доступ запрещен' в противном случае.",
             lesson_type="practice",
+            test_code=textwrap.dedent("""
+                import pytest
+                from solution import check_age
+                def test_check_age():
+                    assert check_age(20) == 'Доступ разрешен'
+                    assert check_age(18) == 'Доступ разрешен'
+                    assert check_age(17) == 'Доступ запрещен'
+            """),
+            expected_constructs=["if", "return"],
+            starter_code="def check_age(age):\n  if age >= 18:\n    # ...\n  else:\n    # ..."
+        )
+
+        # Задача 2 на условия (похожая)
+        practice_m3_p2 = models.Lesson(
+            title="Урок 3.3: Практика - Определение сезона",
+            module=py_mod3, content="Создайте функцию `get_season`, которая принимает номер месяца (от 1 до 12) и возвращает строку: 'Зима', 'Весна', 'Лето' или 'Осень'.",
+            lesson_type="practice",
+            test_code=textwrap.dedent("""
+                import pytest
+                from solution import get_season
+                def test_get_season():
+                    assert get_season(1) == 'Зима'
+                    assert get_season(4) == 'Весна'
+                    assert get_season(7) == 'Лето'
+                    assert get_season(10) == 'Осень'
+            """),
+            expected_constructs=["if", "elif", "return"],
+            starter_code="def get_season(month):\n  # Ваш код здесь\n  return '...'"
+        )
+
+        # --- Модуль 4: Функции и return (для AI) ---
+        py_mod4 = models.Module(title="Модуль 4: Продвинутые функции", course=py_course)
+        
+        lesson_m4_t1 = models.Lesson(title="Урок 4.1: Основы функций и return", module=py_mod4, content="...", lesson_type="text")
+        
+        practice_m4_p1 = models.Lesson(
+            title="Урок 4.2: Практика - Возврат приветствия",
+            module=py_mod4,
+            content="Напишите функцию `get_greeting`, которая принимает `name` и ВОЗВРАЩАЕТ строку 'Привет, {name}!'.",
+            lesson_type="practice",
+            # --- ВОЗВРАЩАЕМ КОД ТЕСТА ---
+            test_code=textwrap.dedent("""
+                import pytest
+                from solution import get_greeting
+                def test_greeting():
+                    assert get_greeting('Мир') == 'Привет, Мир!'
+            """), 
+            expected_constructs=["return"],
+            starter_code="def get_greeting(name):\n  return f'Привет, {name}!'"
+        )
+
+        # Задача 2 на pytest (похожая)
+        practice_m4_p2 = models.Lesson(
+            title="Урок 4.3: Практика - Сумма чисел",
+            module=py_mod4,
+            content="Напишите функцию `calculate_sum`, которая принимает список чисел и ВОЗВРАЩАЕТ их сумму.",
+            lesson_type="practice",
+            # --- ВОЗВРАЩАЕМ КОД ТЕСТА ---
             test_code=textwrap.dedent("""
                 import pytest
                 from solution import calculate_sum
                 def test_sum():
                     assert calculate_sum([1, 2, 3]) == 6
-                    assert calculate_sum([-1, 1, 0]) == 0
-            """),
-            expected_constructs=["for", "return"]
+            """), 
+            expected_constructs=["return", "for"],
+            starter_code="def calculate_sum(numbers):\n  # Ваш код здесь\n  return 0"
         )
         
-        # Задача 2 на итерацию (сформулирована иначе, но суть та же)
-        practice_loops_2 = models.Lesson(
-            title="Урок 2.3: Практика - Поиск длины всех слов",
-            module=py_mod2,
-            content="Создайте функцию `total_length`, которая получает на вход список строк и должна ВЕРНУТЬ суммарную длину всех этих строк.",
-            lesson_type="practice",
-            test_code=textwrap.dedent("""
-                import pytest
-                from solution import total_length
-                def test_length():
-                    assert total_length(['привет', 'мир']) == 10
-                    assert total_length(['a', 'b', 'c']) == 3
-            """),
-            expected_constructs=["for", "return"]
-        )
-
-        # --- Модуль 3: РАБОТА СО СЛОВАРЯМИ (для демонстрации AI) ---
-        py_mod3 = models.Module(title="Модуль 3: Словари", course=py_course)
-        
-        lesson_theory_dicts = models.Lesson(
-            title="Урок 3.1: Теория по словарям",
-            module=py_mod3,
-            content="Словарь в Python — это неупорядоченная коллекция объектов 'ключ-значение'. Доступ к значению осуществляется по ключу, например: `my_dict['name']`.",
-            lesson_type="text"
-        )
-
-        # Задача 1 на словари
-        practice_dicts_1 = models.Lesson(
-            title="Урок 3.2: Практика - Получение значения",
-            module=py_mod3,
-            content="Напишите функцию `get_user_email`, которая принимает словарь `user` и ВОЗВРАЩАЕТ значение по ключу 'email'.",
-            lesson_type="practice",
-            test_code=textwrap.dedent("""
-                import pytest
-                from solution import get_user_email
-                def test_email():
-                    assert get_user_email({'name': 'Alex', 'email': 'a@a.com'}) == 'a@a.com'
-            """),
-            expected_constructs=["return"]
-        )
-
-        # Задача 2 на словари (сформулирована иначе)
-        practice_dicts_2 = models.Lesson(
-            title="Урок 3.3: Практика - Извлечение данных",
-            module=py_mod3,
-            content="Создайте функцию `get_item_price`, которая получает на вход словарь `item` и должна ВЕРНУТЬ цену товара, которая хранится под ключом 'price'.",
-            lesson_type="practice",
-            test_code=textwrap.dedent("""
-                import pytest
-                from solution import get_item_price
-                def test_price():
-                    assert get_item_price({'name': 'apple', 'price': 100}) == 100
-            """),
-            expected_constructs=["return"]
-        )
-
         # --- Сборка и сохранение ---
         db.add_all([
-            py_course,
-            py_mod1, py_mod2, py_mod3,
-            lesson_theory_print, lesson_practice_print,
-            lesson_theory_loops, practice_loops_1, practice_loops_2,
-            lesson_theory_dicts, practice_dicts_1, practice_dicts_2
+            py_course, py_mod1, py_mod2, py_mod3, py_mod4,
+            lesson_m1_t1, lesson_m1_t2, lesson_m1_p1, lesson_m1_p2, quiz_m1,
+            lesson_m2_t1, lesson_m2_p1, quiz_m2,
+            lesson_m3_t1, practice_m3_p1, practice_m3_p2,
+            lesson_m4_t1, practice_m4_p1, practice_m4_p2
+        ])
+        db.flush() 
+
+        # --- Вопросы для квизов ---
+        # Квиз 1
+        db.add_all([
+            models.Question(lesson_id=quiz_m1.id, question_text="Какой командой вывести текст?", details={"options": ["print()", "console.log()", "#"], "correct_answer": "print()"}),
+            models.Question(lesson_id=quiz_m1.id, question_text="Какой символ для комментария?", details={"options": ["//", "#", "/* */"], "correct_answer": "#"})
+        ])
+        # Квиз 2
+        db.add_all([
+            models.Question(lesson_id=quiz_m2.id, question_text="Тип переменной x = 5.0?", details={"options": ["int", "str", "float"], "correct_answer": "float"}),
+            models.Question(lesson_id=quiz_m2.id, question_text="Результат '1' + '2'?", details={"options": ["3", "12", "Error"], "correct_answer": "12"})
         ])
         
         db.commit()

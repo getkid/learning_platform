@@ -215,7 +215,7 @@ def get_recommendations(user_id: int):
 
     # 3. Проводим кластеризацию
     vectors = np.array([e["lesson_context"]["content_vector"] for e in actual_errors])
-    clustering = DBSCAN(eps=0.9, min_samples=2, metric='cosine').fit(vectors)
+    clustering = DBSCAN(eps=0.6, min_samples=2, metric='cosine').fit(vectors)
     labels = clustering.labels_
 
     unique_labels, counts = np.unique(labels[labels != -1], return_counts=True)
