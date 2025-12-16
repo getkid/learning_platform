@@ -42,6 +42,33 @@ def get_course_by_id(db: Session, course_id: int):
     """Получить один курс по его ID со всеми модулями и уроками."""
     return db.query(models.Course).filter(models.Course.id == course_id).first()
 
+def get_lesson_with_navigation(db: Session, lesson_id: int):
+    """Находит урок и ID предыдущего/следующего урока в рамках всего курса."""
+    current_lesson = db.query(models.Lesson).filter(models.Lesson.id == lesson_id).first()
+    if not current_lesson:
+        return None
+
+    # Собираем все уроки курса в правильном порядке (по ID модулей, потом по ID уроков)
+    all_lessons = db.query(models.Lesson).join(models.Module)\
+        .filter(models.Module.course_id == current_lesson.module.course_id)\
+        .order_by(models.Module.id, models.Lesson.id).all()
+    
+    # Находим индекс текущего урока в этом списке
+    try:
+        current_index = [lesson.id for lesson in all_lessons].index(lesson_id)
+    except ValueError:
+        return current_lesson # Если что-то пошло не так, вернем просто урок
+
+    # Определяем сос-дей
+    prev_lesson = all_lessons[current_index - 1] if current_index > 0 else None
+    next_lesson = all_lessons[current_index + 1] if current_index < len(all_lessons) - 1 else None
+    
+    # Добавляем навигацию к нашему объекту урока
+    current_lesson.prev_lesson = prev_lesson
+    current_lesson.next_lesson = next_lesson
+    
+    return current_lesson
+
 def get_lesson_by_id(db: Session, lesson_id: int):
     """Получить один урок по его ID."""
     return db.query(models.Lesson).filter(models.Lesson.id == lesson_id).first()

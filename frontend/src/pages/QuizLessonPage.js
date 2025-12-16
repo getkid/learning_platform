@@ -2,6 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import apiClient from './api';
+import LessonNavigation from '../components/LessonNavigation'
 
 function QuizLessonPage() {
   const { lessonId } = useParams();
@@ -112,6 +113,13 @@ fetchQuiz();
           </button>
         </div>
       )}
+      <LessonNavigation 
+                prevLesson={lesson.prev_lesson} 
+                nextLesson={lesson.next_lesson}
+                // ID курса нам пока неизвестен, это нужно доработать
+                // Пока поставим заглушку
+                courseId={1} 
+            />
     </div>
   );
 }

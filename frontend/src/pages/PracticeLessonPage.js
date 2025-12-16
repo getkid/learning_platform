@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams } from 'react-router-dom';
 import apiClient from './api';
+import LessonNavigation from '../components/LessonNavigation'
 
 // Импортируем редактор и стили для подсветки синтаксиса
 import Editor from 'react-simple-code-editor';
@@ -146,6 +147,13 @@ function PracticeLessonPage() {
       }}>
         {output || 'Нажмите "Запустить код", чтобы увидеть результат.'}
       </pre>
+      <LessonNavigation 
+                prevLesson={lesson.prev_lesson} 
+                nextLesson={lesson.next_lesson}
+                // ID курса нам пока неизвестен, это нужно доработать
+                // Пока поставим заглушку
+                courseId={1} 
+            />
     </div>
   );
 }

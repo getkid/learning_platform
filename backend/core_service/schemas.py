@@ -13,6 +13,10 @@ class UserOut(BaseModel):
     class Config:
         from_attributes = True 
 
+class LessonLink(BaseModel):
+    id: int
+    lesson_type: str
+
 class Lesson(BaseModel):
     id: int
     title: str
@@ -21,6 +25,8 @@ class Lesson(BaseModel):
     completed: bool = False
     test_code: Optional[str] = None
     starter_code: Optional[str] = None 
+    next_lesson: Optional[LessonLink] = None
+    prev_lesson: Optional[LessonLink] = None
     class Config:
         from_attributes = True 
 

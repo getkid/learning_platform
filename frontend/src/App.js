@@ -22,6 +22,7 @@ function App() {
   }
 
   return (
+    <main className="container"> 
     <div>
       <nav style={{ padding: '10px', background: '#eee' }}>
         <Link to="/">Главная</Link> | {" "}
@@ -55,6 +56,7 @@ function App() {
         </Routes>
       </div>
     </div>
+    </main>
   );
 }
 

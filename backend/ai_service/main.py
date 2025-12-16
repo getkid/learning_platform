@@ -5,6 +5,7 @@ import threading
 import time
 import requests
 import ast
+from sklearn.metrics import pairwise_distances
 from fastapi import FastAPI
 from sentence_transformers import SentenceTransformer
 from pymongo import MongoClient
@@ -138,7 +139,6 @@ def startup_event():
     listener_thread = threading.Thread(target=listen_for_events, daemon=True)
     listener_thread.start()
 
-# backend/ai_service/main.py
 
 @app.get("/recommendations/{user_id}")
 def get_recommendations(user_id: int):
@@ -151,16 +151,69 @@ def get_recommendations(user_id: int):
     except requests.RequestException as e:
         print(f"AI Service: Could not fetch completed lessons. Error: {e}", flush=True)
 
-    # 2. Находим ВСЕ недавние ошибки пользователя
-    all_recent_errors = list(error_logs_collection.find({"user_id": user_id}).sort("timestamp", -1).limit(30))
+    
 
-    # 3. Отбираем для анализа только АКТУАЛЬНЫЕ (не пройденные) ошибки
-    actual_errors = [e for e in all_recent_errors if e.get('lesson_id') not in completed_lessons_ids]
+    # 2. Отбираем для анализа только АКТУАЛЬНЫЕ (не пройденные) ошибки
+    actual_errors = list(error_logs_collection.find(
+        {"user_id": user_id, "lesson_id": {"$nin": list(completed_lessons_ids)}}
+    ).sort("timestamp", -1).limit(30))
     
     if len(actual_errors) < 2:
         return {"type": "no_recommendation", "message": "Продолжайте учиться!"}
+    
+    # --- НАЧАЛО СУПЕР-ОТЛАДКИ ---
+    print("\n" + "="*50, flush=True)
+    print("AI CLUSTERING ANALYSIS START", flush=True)
+    print("="*50, flush=True)
 
-    # 4. Проводим кластеризацию
+    # 1. Показываем, какие уроки анализируем
+    print(f"Found {len(actual_errors)} actual errors for analysis:", flush=True)
+    error_lessons_info = {}
+    for error in actual_errors:
+        lesson_id = error.get('lesson_id')
+        lesson_title = error.get('lesson_context', {}).get('lesson_content', 'Unknown')[:30] + '...'
+        error_lessons_info[lesson_id] = lesson_title
+        print(f"  - Lesson ID: {lesson_id}, Title: '{lesson_title}'", flush=True)
+
+    # 2. Готовим векторы
+    vectors = np.array([e["lesson_context"]["content_vector"] for e in actual_errors])
+    
+    # 3. Вычисляем и печатаем матрицу расстояний
+    # Это покажет, насколько "далеки" друг от друга описания уроков
+    # Значения близки к 0 = очень похожи. Значения близки к 1 = очень разные.
+    distances = pairwise_distances(vectors, metric='cosine')
+    print("\nCosine Distance Matrix (0=similar, 1=different):", flush=True)
+    print(distances, flush=True)
+
+    # 4. Запускаем кластеризацию
+    clustering = DBSCAN(eps=0.6, min_samples=2, metric='cosine').fit(vectors)
+    labels = clustering.labels_
+    print(f"\nDBSCAN Result (labels for each error): {labels}", flush=True)
+    # -1 означает "шум" (не попал ни в один кластер)
+    # 0, 1, 2... - это номера кластеров
+
+    unique_labels, counts = np.unique(labels[labels != -1], return_counts=True)
+    
+    if len(counts) == 0:
+        print("No clusters found. All errors considered noise.", flush=True)
+        print("="*50 + "\n", flush=True)
+        return {"type": "no_recommendation", "message": "Ваши ошибки разнообразны!"}
+
+    # 5. Находим самый большой кластер
+    largest_cluster_label = unique_labels[counts.argmax()]
+    print(f"Largest cluster is label: {largest_cluster_label}", flush=True)
+
+    cluster_error_indices = [i for i, label in enumerate(labels) if label == largest_cluster_label]
+    print(f"Indices of errors in this cluster: {cluster_error_indices}", flush=True)
+
+    cluster_errors = [actual_errors[i] for i in cluster_error_indices]
+    
+    cluster_lesson_ids = {e['lesson_id'] for e in cluster_errors}
+    print(f"Lesson IDs in this cluster: {cluster_lesson_ids}", flush=True)
+    print("="*50 + "\n", flush=True)
+    # --- КОНЕЦ СУПЕР-ОТЛАДКИ ---  
+
+    # 3. Проводим кластеризацию
     vectors = np.array([e["lesson_context"]["content_vector"] for e in actual_errors])
     clustering = DBSCAN(eps=0.9, min_samples=2, metric='cosine').fit(vectors)
     labels = clustering.labels_
@@ -172,60 +225,43 @@ def get_recommendations(user_id: int):
 
     largest_cluster_label = unique_labels[counts.argmax()]
     
-    # 5. Получаем все записи об ошибках из самого большого кластера
+    # 4. Получаем все записи об ошибках из самого большого кластера
     cluster_errors = [
         actual_errors[i] for i, label in enumerate(labels) if label == largest_cluster_label
     ]
     
-    # --- НАЧАЛО ОТЛАДОЧНОГО БЛОКА ---
-    print("\n--- AI DEBUG START ---", flush=True)
-    
-    latest_error_in_cluster = cluster_errors[0]
-    print(f"Latest error in cluster is for lesson ID: {latest_error_in_cluster.get('lesson_id')}", flush=True)
+    # --- НАЧИНАЕТСЯ ИНТЕЛЛЕКТУАЛЬНЫЙ АНАЛИЗ ---
 
+    # 5. ПУТЬ 2: Пытаемся найти конкретную ошибку в коде (анализ AST)
+    latest_error_in_cluster = cluster_errors[0]
     code_analysis = latest_error_in_cluster.get("code_analysis", {})
     lesson_context = latest_error_in_cluster.get("lesson_context", {})
     expected_constructs = lesson_context.get("expected_constructs", [])
-    used_constructs = code_analysis.get("ast_nodes", [])
 
-    print(f"Expected constructs: {expected_constructs}", flush=True)
-    print(f"Used constructs (from AST): {used_constructs}", flush=True)
-    # --- КОНЕЦ ОТЛАДОЧНОГО БЛОКА ---
-
-    # 6. ПУТЬ 2: Пытаемся найти конкретную ошибку в коде (анализ AST)
     if expected_constructs:
-        found_specific_error = False
+        used_constructs = code_analysis.get("ast_nodes", [])
         for construct in expected_constructs:
             ast_construct_name = construct.capitalize()
-            
-            print(f"Checking for '{ast_construct_name}'... Is it in used constructs? {'Yes' if ast_construct_name in used_constructs else 'NO!'}", flush=True)
-
             if ast_construct_name not in used_constructs:
-                found_specific_error = True
-                print(f"FOUND SPECIFIC ERROR: User did not use '{construct}'", flush=True)
+                # НАШЛИ ОШИБКУ! Даем рекомендацию по теории
                 try:
-                    print("Attempting to fetch related theory...", flush=True)
-                    res = requests.get(f"{CORE_SERVICE_URL}/internal/lessons/{latest_error_in_cluster['lesson_id']}")
-                    print(f"Core service response status: {res.status_code}", flush=True)
+                    # Запрашиваем инфо о ТЕОРЕТИЧЕСКОМ уроке
+                    res = requests.get(f"{CORE_SERVICE_URL}/internal/lessons/{latest_error_in_cluster['lesson_id']}/related-theory")
                     if res.status_code == 200:
                         theory_lesson_info = res.json()
-                        print("--- AI DEBUG END ---\n", flush=True)
-                        return {
+                        # --- ИСПРАВЛЕНИЕ 1: Добавляем print и return ---
+                        response_data = {
                             "type": "code_analysis_recommendation",
                             "message": f"Похоже, в этой группе задач вы не использовали ключевую конструкцию '{construct}'. Рекомендуем перечитать теорию:",
                             "lesson": theory_lesson_info
                         }
-                except requests.RequestException:
+                        print(f"FINAL RESPONSE (CODE ANALYSIS): {response_data}", flush=True)
+                        return response_data
+                except requests.RequestException as e:
+                    print(f"ERROR fetching related theory: {e}", flush=True)
                     pass # Если не удалось, просто проваливаемся в кластерную рекомендацию
-                break # Выходим из цикла, так как нашли первую ошибку
-        
-        if not found_specific_error:
-            print("No specific code error found. Falling back to cluster recommendation.", flush=True)
 
-    print("--- AI DEBUG END ---\n", flush=True)
-    # -------------------------------------
-
-    # 7. ПУТЬ 1: Если конкретных ошибок не найдено, даем общую рекомендацию по кластеру
+    # 6. ПУТЬ 1: Если конкретных ошибок не найдено, даем общую рекомендацию по кластеру
     problem_lesson_ids = {e["lesson_id"] for e in cluster_errors}
     
     problem_lessons_info = []
@@ -240,12 +276,11 @@ def get_recommendations(user_id: int):
     if not problem_lessons_info:
          return {"type": "no_recommendation", "message": "Не удалось получить детали проблемных уроков."}
     
+    # --- ИСПРАВЛЕНИЕ 2: Убираем лишние переменные, добавляем print и return ---
     response_data = {
         "type": "cluster_recommendation",
-        "message": "Мы заметили...",
+        "message": "Наш AI заметил, что у вас возникают трудности с группой похожих по смыслу задач. Рекомендуем поработать над ними еще раз:",
         "lessons": problem_lessons_info
     }
-
-    print(f"FINAL RESPONSE: {response_data}", flush=True)
-
+    print(f"FINAL RESPONSE (CLUSTER): {response_data}", flush=True)
     return response_data

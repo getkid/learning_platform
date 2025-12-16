@@ -135,83 +135,125 @@ def startup_event():
     if not first_course:
         print("База данных курсов пуста. Создаю тестовые данные...", flush=True)
         
-        # --- Курс Python ---
-        py_course = models.Course(title="Python для начинающих", description="Изучите основы программирования на Python.")
-        py_mod1 = models.Module(title="Модуль 1: Введение", course=py_course)
-        py_mod2 = models.Module(title="Модуль 2: Типы данных", course=py_course)
+        print("База данных курсов пуста. Создаю расширенный набор тестовых данных...", flush=True)
         
-        lesson1 = models.Lesson(title="Урок 1.1: Что такое Python?", module=py_mod1, content="Python - это высокоуровневый язык программирования...")
-        lesson2 = models.Lesson(title="Урок 1.2: Установка", module=py_mod1, content="Для установки Python перейдите на официальный сайт python.org...")
-        quiz_lesson = models.Lesson(title="Урок 1.3: Проверка знаний (Квиз)", module=py_mod1, content="Проверьте свои знания по основам Python.", lesson_type="quiz")
+        # =================================================================
+        # === КУРС 1: PYTHON ДЛЯ НАЧИНАЮЩИХ ===============================
+        # =================================================================
+        py_course = models.Course(
+            title="Python для начинающих", 
+            description="Изучите основы программирования на Python с нуля."
+        )
+
+        # --- Модуль 1: Основы и вывод (для разогрева) ---
+        py_mod1 = models.Module(title="Модуль 1: Первые шаги", course=py_course)
         
-        # --- Урок 1 (старый) ---
-        practice_lesson_1 = models.Lesson(
-            title="Урок 2.1: Функция, возвращающая приветствие",
+        lesson_theory_print = models.Lesson(title="Урок 1.1: Функция print()", module=py_mod1, content="...", lesson_type="text")
+        
+        lesson_practice_print = models.Lesson(
+            title="Урок 1.2: Практика с print()",
+            module=py_mod1,
+            content="Ваша задача: вывести на экран точную строку 'Я изучаю Python!'",
+            lesson_type="practice",
+            test_code="# test_type: stdout\n# expected_output: Я изучаю Python!",
+            starter_code="print('...')"
+        )
+        
+        # --- Модуль 2: ИТЕРАЦИЯ ПО СПИСКАМ (для демонстрации AI) ---
+        py_mod2 = models.Module(title="Модуль 2: Циклы и Списки", course=py_course)
+
+        lesson_theory_loops = models.Lesson(
+            title="Урок 2.1: Теория по циклам for",
             module=py_mod2,
-            content="Напишите функцию get_greeting(), которая ВОЗВРАЩАЕТ (return) строку 'Привет из Python'.",
+            content="Цикл for используется для перебора элементов в последовательности (например, в списке). Синтаксис: for элемент in список:",
+            lesson_type="text"
+        )
+        
+        # Задача 1 на итерацию
+        practice_loops_1 = models.Lesson(
+            title="Урок 2.2: Практика - Сумма чисел",
+            module=py_mod2,
+            content="Напишите функцию `calculate_sum`, которая принимает список чисел и ВОЗВРАЩАЕТ их общую сумму.",
             lesson_type="practice",
             test_code=textwrap.dedent("""
                 import pytest
-                from solution import get_greeting
-
-                def test_get_greeting():
-                    assert get_greeting() == 'Привет из Python', "Функция должна возвращать строку 'Привет из Python'"
+                from solution import calculate_sum
+                def test_sum():
+                    assert calculate_sum([1, 2, 3]) == 6
+                    assert calculate_sum([-1, 1, 0]) == 0
             """),
-            expected_constructs=["return"],
-            starter_code="# Напишите функцию, которая возвращает 'Привет из Python'\ndef get_greeting():\n  # ваш код здесь\n  return \"...\""
+            expected_constructs=["for", "return"]
         )
-
-        # --- НОВЫЙ УРОК 2 ---
-        # Он семантически похож на первый, но требует другую функцию и другую строку
-        practice_lesson_2 = models.Lesson(
-            title="Урок 2.2: Функция, возвращающая имя",
+        
+        # Задача 2 на итерацию (сформулирована иначе, но суть та же)
+        practice_loops_2 = models.Lesson(
+            title="Урок 2.3: Практика - Поиск длины всех слов",
             module=py_mod2,
-            content="Создайте функцию get_name(), которая должна ВЕРНУТЬ ваше имя в виде строки. Например, 'Алексей'.",
+            content="Создайте функцию `total_length`, которая получает на вход список строк и должна ВЕРНУТЬ суммарную длину всех этих строк.",
             lesson_type="practice",
             test_code=textwrap.dedent("""
                 import pytest
-                from solution import get_name
-
-                def test_get_name_returns_string():
-                    name = get_name()
-                    assert isinstance(name, str), "Функция должна возвращать строку (str)"
-                    assert len(name) > 1, "Имя должно быть длиннее одного символа"
+                from solution import total_length
+                def test_length():
+                    assert total_length(['привет', 'мир']) == 10
+                    assert total_length(['a', 'b', 'c']) == 3
             """),
-            expected_constructs=["return"],
-            starter_code="# Создайте функцию get_name(), которая вернет ваше имя\ndef get_name():\n  # ваш код здесь\n  return \"Алексей\""
+            expected_constructs=["for", "return"]
         )
-        
-        # --- Курс JS ---
-        js_course = models.Course(title="Продвинутый JavaScript", description="Погружение в концепции JS.")
 
+        # --- Модуль 3: РАБОТА СО СЛОВАРЯМИ (для демонстрации AI) ---
+        py_mod3 = models.Module(title="Модуль 3: Словари", course=py_course)
+        
+        lesson_theory_dicts = models.Lesson(
+            title="Урок 3.1: Теория по словарям",
+            module=py_mod3,
+            content="Словарь в Python — это неупорядоченная коллекция объектов 'ключ-значение'. Доступ к значению осуществляется по ключу, например: `my_dict['name']`.",
+            lesson_type="text"
+        )
+
+        # Задача 1 на словари
+        practice_dicts_1 = models.Lesson(
+            title="Урок 3.2: Практика - Получение значения",
+            module=py_mod3,
+            content="Напишите функцию `get_user_email`, которая принимает словарь `user` и ВОЗВРАЩАЕТ значение по ключу 'email'.",
+            lesson_type="practice",
+            test_code=textwrap.dedent("""
+                import pytest
+                from solution import get_user_email
+                def test_email():
+                    assert get_user_email({'name': 'Alex', 'email': 'a@a.com'}) == 'a@a.com'
+            """),
+            expected_constructs=["return"]
+        )
+
+        # Задача 2 на словари (сформулирована иначе)
+        practice_dicts_2 = models.Lesson(
+            title="Урок 3.3: Практика - Извлечение данных",
+            module=py_mod3,
+            content="Создайте функцию `get_item_price`, которая получает на вход словарь `item` и должна ВЕРНУТЬ цену товара, которая хранится под ключом 'price'.",
+            lesson_type="practice",
+            test_code=textwrap.dedent("""
+                import pytest
+                from solution import get_item_price
+                def test_price():
+                    assert get_item_price({'name': 'apple', 'price': 100}) == 100
+            """),
+            expected_constructs=["return"]
+        )
+
+        # --- Сборка и сохранение ---
         db.add_all([
-            py_course, js_course,
-            py_mod1, py_mod2,
-            lesson1, lesson2, quiz_lesson, 
-            practice_lesson_1, practice_lesson_2 # <-- Добавляем оба урока
+            py_course,
+            py_mod1, py_mod2, py_mod3,
+            lesson_theory_print, lesson_practice_print,
+            lesson_theory_loops, practice_loops_1, practice_loops_2,
+            lesson_theory_dicts, practice_dicts_1, practice_dicts_2
         ])
         
-        db.flush()
-
-        # 6. Теперь, когда у quiz_lesson есть ID, создаем для него вопросы
-        q1 = models.Question(
-            lesson_id=quiz_lesson.id,
-            question_text="Какой командой можно вывести текст на экран в Python?",
-            details={"options": ["print()", "console.log()", "echo"], "correct_answer": "print()"}
-        )
-        q2 = models.Question(
-            lesson_id=quiz_lesson.id,
-            question_text="Какой символ используется для однострочных комментариев?",
-            details={"options": ["//", "/* */", "#"], "correct_answer": "#"}
-        )
-        db.add_all([q1, q2])
-        
-        # 7. Делаем ОДИН commit в самом конце, чтобы сохранить все изменения
         db.commit()
-
     db.close()
 
-    # --- ЧАСТЬ 2: Запуск фонового слушателя ---
+    # Запускаем фоновый слушатель
     print("Запускаем фоновый процесс для прослушки RabbitMQ...", flush=True)
     listener_thread = threading.Thread(target=listen_for_results, daemon=True)
     listener_thread.start()
@@ -290,8 +332,8 @@ def read_course(
 
 @app.get("/lessons/{lesson_id}", response_model=schemas.Lesson)
 def read_lesson(lesson_id: int, db: Session = Depends(get_db)):
-    
-    db_lesson = crud.get_lesson_by_id(db, lesson_id=lesson_id)
+    # Используем новую функцию
+    db_lesson = crud.get_lesson_with_navigation(db, lesson_id=lesson_id)
     if db_lesson is None:
         raise HTTPException(status_code=404, detail="Lesson not found")
     return db_lesson

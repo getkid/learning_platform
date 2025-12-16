@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import apiClient from './api';
+import LessonNavigation from '../components/LessonNavigation'
 
 function LessonPage() {
   // Получаем lessonId из URL (например, "1" из /lessons/1)
@@ -50,6 +51,13 @@ function LessonPage() {
       <div style={{ marginTop: '20px', lineHeight: '1.6' }}>
         <p>{lesson.content}</p>
       </div>
+      <LessonNavigation 
+                prevLesson={lesson.prev_lesson} 
+                nextLesson={lesson.next_lesson}
+                // ID курса нам пока неизвестен, это нужно доработать
+                // Пока поставим заглушку
+                courseId={1} 
+            />
     </div>
   );
 }
