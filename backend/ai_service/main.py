@@ -179,8 +179,6 @@ def get_recommendations(user_id: int):
     vectors = np.array([e["lesson_context"]["content_vector"] for e in actual_errors])
     
     # 3. Вычисляем и печатаем матрицу расстояний
-    # Это покажет, насколько "далеки" друг от друга описания уроков
-    # Значения близки к 0 = очень похожи. Значения близки к 1 = очень разные.
     distances = pairwise_distances(vectors, metric='cosine')
     print("\nCosine Distance Matrix (0=similar, 1=different):", flush=True)
     print(distances, flush=True)
@@ -189,8 +187,6 @@ def get_recommendations(user_id: int):
     clustering = DBSCAN(eps=0.6, min_samples=2, metric='cosine').fit(vectors)
     labels = clustering.labels_
     print(f"\nDBSCAN Result (labels for each error): {labels}", flush=True)
-    # -1 означает "шум" (не попал ни в один кластер)
-    # 0, 1, 2... - это номера кластеров
 
     unique_labels, counts = np.unique(labels[labels != -1], return_counts=True)
     
@@ -214,6 +210,7 @@ def get_recommendations(user_id: int):
     # --- КОНЕЦ СУПЕР-ОТЛАДКИ ---  
 
     # 3. Проводим кластеризацию
+    
     vectors = np.array([e["lesson_context"]["content_vector"] for e in actual_errors])
     clustering = DBSCAN(eps=0.6, min_samples=2, metric='cosine').fit(vectors)
     labels = clustering.labels_
